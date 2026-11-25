@@ -32,6 +32,7 @@ const CUSTOM_PAGES = [
   { module: 'pharmacy', label: 'Dispensing Queue', to: '/pharmacy-queue', perm: 'pharmacy.dispense' },
   { module: 'pharmacy', label: 'OTC Point of Sale', to: '/pharmacy-pos', perm: 'pharmacy.pos' },
   { module: 'pharmacy', label: 'Stock & Expiry', to: '/pharmacy-stock', perm: 'pharmacy.stock' },
+  { module: 'billing', label: 'Price Configuration', to: '/pricing', perm: 'pricing.view' },
   { module: 'billing', label: 'Cashier Desk', to: '/cashier', perm: 'billing.cashier' },
   { module: 'insurance', label: 'Claims Workbench', to: '/claims-workbench', perm: 'claims.work' },
   { module: 'reports', label: 'All Reports', to: '/reports', perm: 'reports.view' },
@@ -42,6 +43,8 @@ const CUSTOM_PAGES = [
 /* Permissions that are not tied to a CRUD resource */
 const EXTRA_PERMISSIONS = [
   ['dashboard.view', 'View dashboard'],
+  ['pricing.view', 'View price configuration'],
+  ['pricing.edit', 'Change prices (services, drugs, packages, payer lists)'],
   ['dental.chart', 'Open the dental chart'],
   ['dental.complete', 'Mark dental procedures done (posts charges)'],
   ['visits.start', 'Start / check-in a visit'],

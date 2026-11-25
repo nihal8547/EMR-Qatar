@@ -42,7 +42,7 @@ const ROLES = [
   {
     name: 'Hospital Manager', description: 'Read-only oversight of every area, approvals, all reports', restrict: false, discount: 20,
     perms: [
-      ...reg.order.map((k) => `${k}:v`), 'dashboard.view', 'reports.view', 'reports.finance', 'billing.approve_discount', 'patients.360',
+      ...reg.order.map((k) => `${k}:v`), 'dashboard.view', 'pricing.view', 'reports.view', 'reports.finance', 'billing.approve_discount', 'patients.360',
       'refunds:v+approve+reject', 'credit_notes:v+approve', 'discount_approvals:v+approve+reject', 'write_offs:v+approve+reject', 'leaves:v+approve+reject',
       'dental.chart', 'requisitions:v+approve+reject', 'purchase_orders:v+approve+cancel', 'payroll_runs:v+approve', 'users:vced', 'roles:v', 'audit_log:v',
     ],
@@ -64,7 +64,7 @@ const ROLES = [
   {
     name: 'Doctor', description: 'Consultation, EMR, orders, prescriptions', restrict: true, discount: 0,
     perms: [
-      'dashboard.view', 'queue.view', 'consult.use', 'patients.360', 'patients:v', 'patient_allergies:vce', 'patient_family:v', 'patient_documents:v', 'consents:v',
+      'dashboard.view', 'pricing.view', 'queue.view', 'consult.use', 'patients.360', 'patients:v', 'patient_allergies:vce', 'patient_family:v', 'patient_documents:v', 'consents:v',
       'appointments:v', 'visits:v', 'vitals:v', 'nursing_notes:v', 'encounters:vce', 'diagnoses:vced', 'diagnosis_codes:v', 'prescriptions:vce', 'prescription_items:vced',
       'procedure_orders:vced', 'certificates:vced', 'referrals:vced', 'lab_orders:v', 'lab_order_items:v', 'lab_tests:v', 'lab_panels:v', 'imaging_orders:v', 'imaging_reports:v',
       'drugs:v', 'drug_interactions:v', 'services:v', 'doctor_schedules:v', 'users:v', ...LOOKUPS,
@@ -85,7 +85,7 @@ const ROLES = [
   {
     name: 'Pharmacist', description: 'Dispensing, OTC sales, drug master, pharmacy stock', restrict: false, discount: 0,
     perms: [
-      'dashboard.view', 'pharmacy.dispense', 'pharmacy.pos', 'pharmacy.stock', 'patients:v', 'visits:v', 'patient_allergies:v', 'prescriptions:v', 'prescription_items:v',
+      'dashboard.view', 'pricing.view', 'pharmacy.dispense', 'pharmacy.pos', 'pharmacy.stock', 'patients:v', 'visits:v', 'patient_allergies:v', 'prescriptions:v', 'prescription_items:v',
       'drugs:vce', 'drug_interactions:vce', 'pharmacy_dispenses:v', 'dispense_items:v', 'controlled_register:v', 'otc_sales:v', 'otc_sale_items:v',
       'stock_batches:v', 'stock_ledger:v', 'stores:v', 'items:v', 'requisitions:vce', 'requisition_items:vced', 'stock_adjustments:vce', 'users:v', ...LOOKUPS,
     ],
@@ -100,7 +100,7 @@ const ROLES = [
   {
     name: 'Cashier', description: 'Invoices, payments, deposits, refund requests, cashier session', restrict: false, discount: 5,
     perms: [
-      'dashboard.view', 'billing.cashier', 'billing.discount', 'queue.view', 'patients:v', 'visits:v', 'services:v', 'packages:v', 'package_items:v', 'price_lists:v', 'price_list_items:v',
+      'dashboard.view', 'pricing.view', 'billing.cashier', 'billing.discount', 'queue.view', 'patients:v', 'visits:v', 'services:v', 'packages:v', 'package_items:v', 'price_lists:v', 'price_list_items:v',
       'charges:vce', 'invoices:v', 'payments:v', 'deposits:vc', 'refunds:vc', 'credit_notes:vc', 'cashier_sessions:v', 'discount_approvals:vc',
       'policy_members:v', 'payers:v', 'plans:v', 'corporate_accounts:v', 'guarantee_letters:v', 'pre_auths:v', 'users:v', ...LOOKUPS,
     ],
@@ -108,7 +108,7 @@ const ROLES = [
   {
     name: 'Claims Officer', description: 'Insurance: eligibility, pre-auth, claims, rejections, remittances', restrict: false, discount: 0,
     perms: [
-      'dashboard.view', 'claims.work', 'claims.submit', 'reports.view', 'reports.finance', 'patients:v', 'visits:v', 'invoices:v', 'charges:v', 'services:v', 'encounters:v', 'diagnoses:v', 'diagnosis_codes:v',
+      'dashboard.view', 'pricing.view', 'claims.work', 'claims.submit', 'reports.view', 'reports.finance', 'patients:v', 'visits:v', 'invoices:v', 'charges:v', 'services:v', 'encounters:v', 'diagnoses:v', 'diagnosis_codes:v',
       'payers:vce', 'plans:vce', 'policy_members:vce', 'eligibility_checks:v', 'pre_auths:vce', 'claims:ve', 'claim_lines:vce', 'claim_batches:v', 'rejection_codes:vce', 'rejections:vce',
       'remittances:vce+post', 'remittance_lines:vced', 'corporate_accounts:vce', 'guarantee_letters:vce', 'corporate_payments:vce+apply', 'write_offs:vc', 'price_lists:vce', 'price_list_items:vced',
       'users:v', ...LOOKUPS,
@@ -117,7 +117,7 @@ const ROLES = [
   {
     name: 'Accountant', description: 'Finance: ledger, journals, vendor bills, bank, finance reports', restrict: false, discount: 0,
     perms: [
-      'dashboard.view', 'reports.view', 'reports.finance', 'invoices:v', 'payments:v', 'refunds:v', 'credit_notes:v', 'cashier_sessions:v', 'claims:v', 'remittances:v', 'write_offs:v',
+      'dashboard.view', 'pricing.view', 'pricing.edit', 'reports.view', 'reports.finance', 'invoices:v', 'payments:v', 'refunds:v', 'credit_notes:v', 'cashier_sessions:v', 'claims:v', 'remittances:v', 'write_offs:v',
       'ledger_accounts:vce', 'journals:vce+post', 'journal_lines:vced', 'vendor_bills:vce', 'vendor_payments:vc', 'bank_accounts:vce', 'bank_statement_lines:vced',
       'suppliers:v', 'purchase_orders:v', 'grns:v', 'doctor_revenue_share:vce', 'payslips:v', 'users:v', ...LOOKUPS,
     ],

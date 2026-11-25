@@ -14,7 +14,7 @@ const roles = ['admin','manager','reception','nurse','drsara','drravi','drdental
   const tk = {};
   for (const r of roles) tk[r] = (await call(null, 'POST', '/auth/login', { username: r, password: PASS })).data.token;
   // 1. unauthenticated
-  for (const p of ['/auth/me', '/meta', '/r/patients', '/lookup/patients', '/dashboard', '/reports', '/queue', '/admin/matrix', '/portal/summary', '/claims/list'])
+  for (const p of ['/auth/me', '/meta', '/pricing/items', '/pricing/lists', '/dental/chart/1', '/r/patients', '/lookup/patients', '/dashboard', '/reports', '/queue', '/admin/matrix', '/portal/summary', '/claims/list'])
     ok(`anon ${p} -> 401`, (await call(null, 'GET', p)).status === 401, (await call(null, 'GET', p)).status);
   ok('garbage token -> 401', (await call('abc.def.ghi', 'GET', '/auth/me')).status === 401);
   ok('unknown /api path -> 404 json', (await call(tk.admin, 'GET', '/nope')).status === 404);
