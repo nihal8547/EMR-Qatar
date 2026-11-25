@@ -109,6 +109,29 @@ router.post('/visits/start', need('visits.start'), wrap(async (req, res) => {
 
 
 /* ---------------------------------------------------------------- Check-in price preview + discount approval */
+/** Printable prescription payload. */
+router.get('/prescriptions/:id/print', need('prescriptions.view'), wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1 || id > 2147483647) throw notFound('Prescription not found');
+  const rx = (await db.query(
+    `SELECT r.id, r.rx_no, r.status, r.notes, r.created_at, p.mrn, p.full_name, p.dob, p.gender, p.qid, p.phone,
+            d.full_name AS doctor, d.licence_no AS doctor_licence, v.visit_no
+       FROM "clinical"."prescriptions" r JOIN "mpi"."patients" p ON p.id=r.patient_id
+       LEFT JOIN "auth"."users" d ON d.id=r.doctor_id LEFT JOIN "scheduling"."visits" v ON v.id=r.visit_id
+      WHERE r.id=$1 AND r.is_deleted=false`, [id])).rows[0];
+  if (!rx) throw notFound('Prescription not found');
+  const items = (await db.query(
+    `SELECT COALESCE(g.brand_name, g.generic_name) AS drug, g.generic_name, g.strength, g.form, i.dose, i.frequency, i.route, i.duration_days, i.qty, i.instructions
+       FROM "clinical"."prescription_items" i JOIN "pharmacy"."drugs" g ON g.id=i.drug_id
+      WHERE i.prescription_id=$1 AND i.is_deleted=false ORDER BY i.id`, [id])).rows;
+  const allergies = (await db.query(
+    `SELECT a.allergen, a.severity FROM "mpi"."patient_allergies" a JOIN "clinical"."prescriptions" r ON r.patient_id=a.patient_id
+      WHERE r.id=$1 AND a.is_deleted=false`, [id])).rows;
+  const s = (await db.query(`SELECT key, value FROM "admin"."settings" WHERE key IN ('centre_name','centre_address','centre_phone') AND is_deleted=false`)).rows;
+  await audit(null, req.user, 'RX_PRINT', 'prescriptions', id, null, req.ip);
+  res.json({ rx, items, allergies, centre: Object.fromEntries(s.map((r) => [r.key, r.value])) });
+}));
+
 router.get('/visits/price-preview', need('visits.start'), wrap(async (req, res) => {
   const q = req.query;
   const payer_type = ['Cash', 'Insurance', 'Corporate'].includes(q.payer_type) ? q.payer_type : 'Cash';

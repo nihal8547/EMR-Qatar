@@ -3,6 +3,7 @@ const route = useRoute()
 const { api } = useApi(); const { err } = useUi(); const { ensure } = useMeta()
 const key = computed(() => String(route.params.key))
 const m = ref<any>(null)
+const printBase = computed(() => ({ lab_orders: '/print/lab', prescriptions: '/print/rx' } as Record<string, string>)[String(route.params.key)] || '')
 const rows = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
@@ -75,9 +76,10 @@ async function exportCsv() { try { await downloadCsv(`/r/${key.value}`, { ...que
     <div class="card flush">
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th v-for="f in listFields" :key="f.name" class="sort" :class="{ num: numeric(f) }" @click="sortBy(f)">{{ f.label }} <span v-if="state.sort === f.name">{{ state.dir === 'asc' ? '▲' : '▼' }}</span></th></tr></thead>
+          <thead><tr><th v-if="printBase" class="no-print"></th><th v-for="f in listFields" :key="f.name" class="sort" :class="{ num: numeric(f) }" @click="sortBy(f)">{{ f.label }} <span v-if="state.sort === f.name">{{ state.dir === 'asc' ? '▲' : '▼' }}</span></th></tr></thead>
           <tbody>
             <tr v-for="r in rows" :key="r.id" class="click" @click="navigateTo(`/r/${key}/${r.id}`)">
+              <td v-if="printBase" class="no-print" @click.stop><NuxtLink :to="`${printBase}/${r.id}`" class="btn sm" title="Print">🖨</NuxtLink></td>
               <td v-for="f in listFields" :key="f.name" :class="{ num: numeric(f) }"><span v-if="isStatus(f) && r[f.name]" class="badge" :class="badgeClass(r[f.name])">{{ r[f.name] }}</span><template v-else>{{ cell(r, f) }}</template></td>
             </tr>
           </tbody>
