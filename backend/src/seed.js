@@ -44,7 +44,7 @@ const ROLES = [
     perms: [
       ...reg.order.map((k) => `${k}:v`), 'dashboard.view', 'reports.view', 'reports.finance', 'billing.approve_discount', 'patients.360',
       'refunds:v+approve+reject', 'credit_notes:v+approve', 'discount_approvals:v+approve+reject', 'write_offs:v+approve+reject', 'leaves:v+approve+reject',
-      'requisitions:v+approve+reject', 'purchase_orders:v+approve+cancel', 'payroll_runs:v+approve', 'users:vced', 'roles:v', 'audit_log:v',
+      'dental.chart', 'requisitions:v+approve+reject', 'purchase_orders:v+approve+cancel', 'payroll_runs:v+approve', 'users:vced', 'roles:v', 'audit_log:v',
     ],
   },
   {
@@ -58,7 +58,7 @@ const ROLES = [
     name: 'Nurse', description: 'Triage, vitals, nursing notes', restrict: true, discount: 0,
     perms: [
       'dashboard.view', 'queue.view', 'patients:v', 'patient_allergies:vce', 'patient_family:v', 'visits:ve', 'vitals:vce', 'nursing_notes:vce', 'appointments:v',
-      'encounters:v', 'diagnoses:v', 'prescriptions:v', 'prescription_items:v', 'procedure_orders:vce', 'patients.360', 'users:v', ...LOOKUPS,
+      'encounters:v', 'diagnoses:v', 'prescriptions:v', 'prescription_items:v', 'procedure_orders:vce', 'patients.360', 'dental.chart', 'dental_chart_entries:v', 'dental_treatment_plans:v', 'dental_plan_items:v', 'users:v', ...LOOKUPS,
     ],
   },
   {
@@ -68,6 +68,7 @@ const ROLES = [
       'appointments:v', 'visits:v', 'vitals:v', 'nursing_notes:v', 'encounters:vce', 'diagnoses:vced', 'diagnosis_codes:v', 'prescriptions:vce', 'prescription_items:vced',
       'procedure_orders:vced', 'certificates:vced', 'referrals:vced', 'lab_orders:v', 'lab_order_items:v', 'lab_tests:v', 'lab_panels:v', 'imaging_orders:v', 'imaging_reports:v',
       'drugs:v', 'drug_interactions:v', 'services:v', 'doctor_schedules:v', 'users:v', ...LOOKUPS,
+      'dental.chart', 'dental.complete', 'dental_chart_entries:vced', 'dental_treatment_plans:vce', 'dental_plan_items:vced',
     ],
   },
   {
@@ -193,6 +194,7 @@ async function main() {
       ['nurse', 'Maria Nurse', 'Nurse'],
       ['drsara', 'Dr. Sara Al-Thani', 'Doctor', 'GM', 'General Practice', 'QTR-GP-1001'],
       ['drravi', 'Dr. Ravi Menon', 'Doctor', 'PED', 'Paediatrics', 'QTR-PD-1002'],
+      ['drdental', 'Dr. Layla Haddad', 'Doctor', 'DEN', 'Dentistry', 'QTR-DN-1003'],
       ['lab', 'Lina Lab Technician', 'Lab Technician', 'LAB'],
       ['radiology', 'Omar Radiographer', 'Radiology Technician', 'RAD'],
       ['pharmacist', 'Priya Pharmacist', 'Pharmacist', 'PHM'],
@@ -209,9 +211,9 @@ async function main() {
         licence_expiry: lic ? '2028-12-31' : null, active: true,
       });
     }
-    for (const username of ['drsara', 'drravi']) {
+    for (const username of ['drsara', 'drravi', 'drdental']) {
       for (const wd of ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday']) {
-        await ins(c, '"scheduling"."doctor_schedules"', { doctor_id: user[username], weekday: wd, start_time: '08:00', end_time: '14:00', slot_minutes: 15, room: username === 'drsara' ? 'Room 1' : 'Room 2', active: true });
+        await ins(c, '"scheduling"."doctor_schedules"', { doctor_id: user[username], weekday: wd, start_time: '08:00', end_time: '14:00', slot_minutes: 15, room: username === 'drsara' ? 'Room 1' : username === 'drravi' ? 'Room 2' : 'Dental 1', active: true });
       }
     }
 
@@ -221,6 +223,15 @@ async function main() {
       ['CONS-GP', 'Consultation - General Practitioner', 'Consultation', 'GM', 100, true, false],
       ['CONS-PED', 'Consultation - Paediatrics', 'Consultation', 'PED', 120, true, false],
       ['CONS-FU', 'Follow-up consultation', 'Consultation', 'GM', 50, true, false],
+      ['CONS-DENT', 'Consultation - Dentist', 'Consultation', 'DEN', 120, true, false],
+      ['DENT-XRAY', 'Dental X-ray (periapical)', 'Dental', 'DEN', 40, true, false],
+      ['DENT-SCALE', 'Scaling and polishing', 'Dental', 'DEN', 200, true, false],
+      ['DENT-FILL', 'Tooth filling (composite)', 'Dental', 'DEN', 250, true, false],
+      ['DENT-RCT', 'Root canal treatment', 'Dental', 'DEN', 900, true, true],
+      ['DENT-EXT', 'Tooth extraction (simple)', 'Dental', 'DEN', 200, true, false],
+      ['DENT-SURG-EXT', 'Surgical extraction', 'Dental', 'DEN', 600, true, false],
+      ['DENT-CROWN', 'Crown (porcelain fused to metal)', 'Dental', 'DEN', 1200, false, false],
+      ['DENT-WHITEN', 'Teeth whitening', 'Dental', 'DEN', 800, false, false],
       ['PHARM', 'Pharmacy - dispensed medicines', 'Pharmacy', 'PHM', 0, true, false],
       ['LAB-CBC', 'Complete blood count', 'Lab', 'LAB', 40, true, false],
       ['LAB-GLU', 'Blood glucose (random)', 'Lab', 'LAB', 15, true, false],
@@ -328,11 +339,21 @@ async function main() {
     });
     await ins(c, '"mpi"."patient_allergies"', { patient_id: patient[2], allergen: 'Penicillin', reaction: 'Rash', severity: 'Moderate', noted_on: new Date().toISOString().slice(0, 10) });
 
+    // demo dental chart + plan for Mohammed
+    const dd = user.drdental;
+    for (const [tooth, surface, condition, note] of [['16', 'Whole tooth', 'Caries', 'Deep occlusal caries'], ['26', 'O', 'Filling', null], ['36', 'Whole tooth', 'Root canal', null], ['18', 'Whole tooth', 'Impacted', 'Mesio-angular'], ['46', 'Whole tooth', 'Missing', null], ['21', 'Whole tooth', 'Crown', null]]) {
+      await ins(c, '"dental"."dental_chart_entries"', { patient_id: patient[0], dentition: 'Permanent', tooth_no: tooth, surface, condition, entry_date: new Date().toISOString().slice(0, 10), recorded_by: dd, notes: note });
+    }
+    const dplan = await ins(c, '"dental"."dental_treatment_plans"', { plan_no: await db.nextCode(c, 'DTP', 5), patient_id: patient[0], doctor_id: dd, plan_date: new Date().toISOString().slice(0, 10), status: 'Accepted', total: 1050, notes: 'Restore 16, then scale and polish' });
+    await ins(c, '"dental"."dental_plan_items"', { plan_id: dplan, dentition: 'Permanent', tooth_no: '16', surface: 'MOD', service_id: svc['DENT-FILL'], fee: 250, status: 'Planned' });
+    await ins(c, '"dental"."dental_plan_items"', { plan_id: dplan, dentition: 'Permanent', tooth_no: '18', surface: 'Whole tooth', service_id: svc['DENT-SURG-EXT'], fee: 600, status: 'Planned' });
+    await ins(c, '"dental"."dental_plan_items"', { plan_id: dplan, dentition: 'Permanent', tooth_no: null, surface: 'Whole tooth', service_id: svc['DENT-SCALE'], fee: 200, status: 'Planned' });
+
     // patient portal login linked to Mohammed
     await ins(c, '"auth"."users"', { username: 'patient', full_name: 'Mohammed Al-Kuwari', email: 'patient@demo.local', role_id: roleId.Patient, password_hash: pass, patient_id: patient[0], active: true });
   });
   console.log(`Seed complete. Demo password for every user: ${DEMO_PASSWORD}`);
-  console.log('Users: admin, manager, reception, nurse, drsara, drravi, lab, radiology, pharmacist, store, cashier, claims, accountant, hr, patient');
+  console.log('Users: admin, manager, reception, nurse, drsara, drravi, drdental, lab, radiology, pharmacist, store, cashier, claims, accountant, hr, patient');
 }
 
 main().then(() => db.pool.end()).catch((e) => { console.error(e.message); process.exit(1); });

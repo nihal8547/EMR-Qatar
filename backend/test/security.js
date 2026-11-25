@@ -9,7 +9,7 @@ async function call(token, method, path, body, raw) {
   return { status: r.status, data: d, text: t, headers: r.headers };
 }
 const ok = (n, c, x) => { if (c) { passed++; } else { failed.push(n); console.log(`FAIL ${n}${x ? ' -> ' + JSON.stringify(x).slice(0, 250) : ''}`); } };
-const roles = ['admin','manager','reception','nurse','drsara','drravi','lab','radiology','pharmacist','store','cashier','claims','accountant','hr','patient'];
+const roles = ['admin','manager','reception','nurse','drsara','drravi','drdental','lab','radiology','pharmacist','store','cashier','claims','accountant','hr','patient'];
 (async () => {
   const tk = {};
   for (const r of roles) tk[r] = (await call(null, 'POST', '/auth/login', { username: r, password: PASS })).data.token;

@@ -2,6 +2,20 @@
 const bcrypt = require('bcryptjs');
 const { bad, conflict, forbidden, round2, getVisit, priceFor, addCharge } = require('./lib');
 
+
+const FDI_PERM = new Set(['11','12','13','14','15','16','17','18','21','22','23','24','25','26','27','28','31','32','33','34','35','36','37','38','41','42','43','44','45','46','47','48']);
+const FDI_PRIM = new Set(['51','52','53','54','55','61','62','63','64','65','71','72','73','74','75','81','82','83','84','85']);
+function checkTooth(dentition, tooth, required) {
+  const t = tooth === undefined || tooth === null ? '' : String(tooth).trim();
+  if (!t) { if (required) throw bad('Tooth number is required'); return; }
+  const set = dentition === 'Primary' ? FDI_PRIM : FDI_PERM;
+  if (!set.has(t)) throw bad(`Tooth ${t} is not a valid ${dentition === 'Primary' ? 'primary' : 'permanent'} FDI tooth number`);
+}
+async function recalcPlan(client, planId) {
+  await client.query(
+    `UPDATE "dental"."dental_treatment_plans" SET total = COALESCE((SELECT SUM(fee) FROM "dental"."dental_plan_items" WHERE plan_id=$1 AND is_deleted=false AND status <> 'Cancelled'),0), updated_at=now() WHERE id=$1`, [planId]);
+}
+
 const H = {
   /* ----- admin ----- */
   async userBefore(ctx) {
@@ -63,6 +77,40 @@ const H = {
     if (ctx.action !== 'create') return;
     await ctx.client.query(
       `UPDATE "scheduling"."visits" SET status='With Doctor', updated_at=now() WHERE id=$1 AND status IN ('Registered','Triage')`, [ctx.row.visit_id]);
+  },
+
+
+  /* ----- dental ----- */
+  async dentalEntryBefore(ctx) {
+    const d = ctx.data; const m = { ...(ctx.existing || {}), ...d };
+    checkTooth(m.dentition, m.tooth_no, true);
+    d.tooth_no = String(m.tooth_no).trim();
+    if (ctx.mode === 'create') d.recorded_by = ctx.user.id;
+    if (d.visit_id) {
+      const v = (await ctx.client.query(`SELECT patient_id FROM "scheduling"."visits" WHERE id=$1 AND is_deleted=false`, [d.visit_id])).rows[0];
+      if (!v) throw bad('Visit not found');
+      if (String(v.patient_id) !== String(m.patient_id)) throw bad('That visit belongs to a different patient');
+    }
+  },
+  async dentalPlanBefore(ctx) {
+    if (ctx.mode === 'update' && ctx.data.patient_id !== undefined && String(ctx.data.patient_id) !== String(ctx.existing.patient_id)) throw bad('Plan patient cannot be changed');
+    delete ctx.data.total;
+  },
+  async dentalItemBefore(ctx) {
+    const d = ctx.data; const m = { ...(ctx.existing || {}), ...d };
+    if (ctx.mode === 'update' && ctx.existing.status !== 'Planned') throw conflict('Only planned items can be edited');
+    delete d.status; delete d.done_on; delete d.done_visit_id;   // status changes only through the complete / cancel actions
+    if (ctx.mode === 'create') d.status = 'Planned';
+    checkTooth(m.dentition, m.tooth_no, false);
+    if (d.tooth_no === '') d.tooth_no = null;
+    if (d.service_id && (d.fee === undefined || d.fee === null || d.fee === '')) {
+      d.fee = (await ctx.client.query(`SELECT price FROM "billing"."services" WHERE id=$1`, [d.service_id])).rows[0]?.price ?? 0;
+    }
+    if (d.fee !== undefined && Number(d.fee) < 0) throw bad('Fee cannot be negative');
+  },
+  async dentalItemAfter(ctx) {
+    const planId = ctx.row ? ctx.row.plan_id : null;
+    if (planId) await recalcPlan(ctx.client, planId);
   },
 
   /* ----- lab / radiology ----- */
@@ -166,4 +214,4 @@ H.userDeleteGuard = async (ctx) => {
   }
 };
 
-module.exports = { run, validate, H };
+module.exports = { run, validate, H, recalcPlan };

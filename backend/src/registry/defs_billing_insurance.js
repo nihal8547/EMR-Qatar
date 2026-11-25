@@ -5,7 +5,7 @@ module.exports = (R) => {
   R('services', 'billing', 'Service Master & Prices', [
     'code:text::req,list,search,uniq',
     'name:text::req,list,search',
-    'category:select=Consultation/Lab/Radiology/Procedure/Pharmacy/Package/Other:Category:req,list,filter',
+    'category:select=Consultation/Lab/Radiology/Procedure/Dental/Pharmacy/Package/Other:Category:req,list,filter',
     'department_id:ref=departments:Department:list',
     'price:money:Cash price (QAR):req,list',
     'covered:bool:Insurance covered:list,def=true',

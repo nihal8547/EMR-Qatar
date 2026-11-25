@@ -6,6 +6,7 @@ const MODULES = [
   { key: 'dashboard', label: 'Dashboard', icon: '🏠' },
   { key: 'front', label: 'Front Office', icon: '🧾', schema: 'mpi' },
   { key: 'clinical', label: 'Clinical (OPD / EMR)', icon: '🩺', schema: 'clinical' },
+  { key: 'dental', label: 'Dental', icon: '🦷', schema: 'dental' },
   { key: 'lab', label: 'Laboratory', icon: '🧪', schema: 'lab' },
   { key: 'radiology', label: 'Radiology', icon: '🩻', schema: 'radiology' },
   { key: 'pharmacy', label: 'Pharmacy', icon: '💊', schema: 'pharmacy' },
@@ -26,6 +27,7 @@ const CUSTOM_PAGES = [
   { module: 'front', label: 'Start Visit (Check-in)', to: '/visit-start', perm: 'visits.start' },
   { module: 'front', label: 'Queue Board', to: '/queue', perm: 'queue.view' },
   { module: 'clinical', label: 'My Consultations', to: '/consult', perm: 'consult.use' },
+  { module: 'dental', label: 'Dental Chart', to: '/dental-chart', perm: 'dental.chart' },
   { module: 'lab', label: 'Lab Worklist', to: '/lab-worklist', perm: 'lab.work' },
   { module: 'pharmacy', label: 'Dispensing Queue', to: '/pharmacy-queue', perm: 'pharmacy.dispense' },
   { module: 'pharmacy', label: 'OTC Point of Sale', to: '/pharmacy-pos', perm: 'pharmacy.pos' },
@@ -40,6 +42,8 @@ const CUSTOM_PAGES = [
 /* Permissions that are not tied to a CRUD resource */
 const EXTRA_PERMISSIONS = [
   ['dashboard.view', 'View dashboard'],
+  ['dental.chart', 'Open the dental chart'],
+  ['dental.complete', 'Mark dental procedures done (posts charges)'],
   ['visits.start', 'Start / check-in a visit'],
   ['queue.view', 'View queue board'],
   ['consult.use', 'Use doctor consultation screen'],
@@ -111,6 +115,7 @@ function Alias(key, of, where, label) {
 /* ---------- Load definitions ---------- */
 require('./defs_admin')(R, Alias);
 require('./defs_front_clinical')(R, Alias);
+require('./defs_dental')(R, Alias);
 require('./defs_diagnostics')(R, Alias);
 require('./defs_pharmacy_inventory')(R, Alias);
 require('./defs_billing_insurance')(R, Alias);

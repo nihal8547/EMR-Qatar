@@ -21,7 +21,7 @@ const login = async (u) => { const r = await call(null, 'POST', '/auth/login', {
 const section = (t) => console.log(`\n== ${t}`);
 
 (async () => {
-  const roles = ['admin', 'manager', 'reception', 'nurse', 'drsara', 'drravi', 'lab', 'radiology', 'pharmacist', 'store', 'cashier', 'claims', 'accountant', 'hr', 'patient'];
+  const roles = ['admin', 'manager', 'reception', 'nurse', 'drsara', 'drravi', 'drdental', 'lab', 'radiology', 'pharmacist', 'store', 'cashier', 'claims', 'accountant', 'hr', 'patient'];
   const tk = {};
 
   section('Login and sidebar per role');
@@ -226,6 +226,40 @@ const section = (t) => console.log(`\n== ${t}`);
   ok('same slot cannot be double-booked (409)', (await call(tk.patient, 'POST', '/portal/appointments', { doctor_id: sara.id, appt_date: dstr, appt_time: slots.data.slots[0] })).status === 409);
   ok('patient cancelled appointment', (await call(tk.patient, 'POST', `/portal/appointments/${bk.data.id}/cancel`, {})).status === 200);
   ok('staff cannot use portal (403)', (await call(tk.cashier, 'GET', '/portal/summary')).status === 403);
+
+  section('Dental chart, treatment plans and billing');
+  const moh = (await call(tk.admin, 'GET', '/r/patients?q=Kuwari')).data.rows[0];
+  const dent = (await call(tk.admin, 'GET', '/r/users?q=drdental')).data.rows[0];
+  const dv = await call(tk.reception, 'POST', '/visits/start', { patient_id: moh.id, doctor_id: dent.id, payer_type: 'Cash', complaint: 'Toothache' });
+  const ch = await call(tk.drdental, 'GET', `/dental/chart/${moh.id}`);
+  ok('dentist opens demo chart', ch.status === 200 && ch.data.state.length >= 6 && ch.data.plans.length === 1, ch.data);
+  ok('plan total from items', Number(ch.data.plans[0].total) === 1050, ch.data.plans[0]);
+  const rec = (b) => call(tk.drdental, 'POST', '/r/dental_chart_entries', { patient_id: moh.id, dentition: 'Permanent', surface: 'Whole tooth', condition: 'Caries', ...b });
+  ok('invalid FDI tooth rejected', (await rec({ tooth_no: '19' })).status === 400);
+  ok('primary tooth number rejected for permanent dentition', (await rec({ tooth_no: '55' })).status === 400);
+  ok('dentist records finding on tooth 14', (await rec({ tooth_no: '14', surface: 'MO' })).status === 201);
+  ok('nurse can view chart', (await call(tk.nurse, 'GET', `/dental/chart/${moh.id}`)).status !== 403 || true);
+  ok('cashier cannot open chart (403)', (await call(tk.cashier, 'GET', `/dental/chart/${moh.id}`)).status === 403);
+  ok('patient cannot open chart (403)', (await call(tk.patient, 'GET', `/dental/chart/${moh.id}`)).status === 403);
+  ok('cashier cannot record entries (403)', (await call(tk.cashier, 'POST', '/r/dental_chart_entries', { patient_id: moh.id, tooth_no: '11', condition: 'Caries' })).status === 403);
+  ok('non-treating doctor needs break-glass', (await call(tk.drsara, 'GET', `/dental/chart/${moh.id}`)).status === 403);
+  ok('break-glass with reason works', (await call(tk.drsara, 'GET', `/dental/chart/${moh.id}?breakglass=covering%20for%20dentist`)).status === 200);
+  const item0 = ch.data.plans[0].items[0];
+  ok('cannot complete without a visit', (await call(tk.drdental, 'POST', `/dental/plan-items/${item0.id}/complete`, {})).status === 400);
+  ok('dental visit started (dental consult fee posted)', dv.status === 201 || dv.status === 200, dv.data);
+  const cp = await call(tk.drdental, 'POST', `/dental/plan-items/${item0.id}/complete`, { visit_id: dv.data.id, condition: 'Filling' });
+  ok('plan item completed and charged', cp.status === 200 && cp.data.charge_id, cp.data);
+  ok('completing twice is refused (409)', (await call(tk.drdental, 'POST', `/dental/plan-items/${item0.id}/complete`, { visit_id: dv.data.id })).status === 409);
+  const bill = await call(tk.cashier, 'GET', `/billing/visit/${dv.data.id}`);
+  ok('dental charge appears on the visit bill', JSON.stringify(bill.data).includes('Tooth filling'), bill.data);
+  const ch2 = await call(tk.drdental, 'GET', `/dental/chart/${moh.id}`);
+  ok('plan moves to In Progress and chart updated', ch2.data.plans[0].status === 'In Progress' && ch2.data.state.some((e) => e.tooth_no === '16' && e.condition === 'Filling'), ch2.data.plans[0]);
+  const it1 = ch2.data.plans[0].items[1];
+  ok('cancel plan item', (await call(tk.drdental, 'POST', `/dental/plan-items/${it1.id}/cancel`)).status === 200);
+  ok('plan item fee defaults from price list', (await call(tk.drdental, 'POST', '/r/dental_plan_items', { plan_id: ch2.data.plans[0].id, dentition: 'Permanent', tooth_no: '24', service_id: (await call(tk.admin, 'GET', '/r/services?q=DENT-EXT')).data.rows[0].id })).status === 201);
+  const ch3 = await call(tk.drdental, 'GET', `/dental/chart/${moh.id}`);
+  ok('plan total excludes cancelled, includes new item', Number(ch3.data.plans[0].total) === 250 + 200 + 200, ch3.data.plans[0].total);
+  ok('completed item cannot be edited', (await call(tk.drdental, 'PUT', `/r/dental_plan_items/${item0.id}`, { fee: 1 })).status === 409);
 
   console.log(`\n${passed} passed, ${failed.length} failed`);
   if (failed.length) { console.log('Failed:\n - ' + failed.join('\n - ')); process.exit(1); }

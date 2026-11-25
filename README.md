@@ -3,6 +3,9 @@
 Nuxt 3 (frontend) · Node.js/Express (API) · PostgreSQL with one schema per domain.
 One registry file set (`backend/src/registry/`) drives the tables, the REST API, permissions, sidebar and the generic list/form pages.
 
+## Dental module
+Sidebar **Dental**: a visual chart (FDI numbering, permanent and primary teeth, five surfaces per tooth, 16 conditions), treatment plans with priced procedures, and completion that posts the charge to the patient's open visit and updates the chart. Demo dentist: `drdental`. Patients not yet treated by the dentist need a break-glass reason (audited), like Patient 360.
+
 ## Run with Docker (easiest)
 
 ```bash
