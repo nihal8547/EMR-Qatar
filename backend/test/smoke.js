@@ -42,7 +42,7 @@ const section = (t) => console.log(`\n== ${t}`);
 
   section('Role-based access is enforced by the API');
   ok('no token -> 401', (await call(null, 'GET', '/r/patients')).status === 401);
-  ok('reception cannot read invoices (403)', (await call(tk.reception, 'GET', '/r/invoices')).status === 403);
+  ok('lab tech cannot read invoices (403)', (await call(tk.lab, 'GET', '/r/invoices')).status === 403);
   ok('reception can read patients', (await call(tk.reception, 'GET', '/r/patients')).status === 200);
   ok('nurse cannot create invoice charges (403)', (await call(tk.nurse, 'POST', '/r/charges', {})).status === 403);
   ok('patient blocked from staff API (403)', (await call(tk.patient, 'GET', '/r/patients')).status === 403);
@@ -51,7 +51,7 @@ const section = (t) => console.log(`\n== ${t}`);
   ok('doctor cannot take payment (403)', (await call(tk.drsara, 'POST', '/billing/invoices/1/pay', { amount: 1, method: 'Card' })).status === 403);
 
   const meta = (await call(tk.reception, 'GET', '/meta')).data;
-  ok('meta hides resources a role cannot view', meta.patients && !meta.invoices && !meta.users === false);
+  ok('meta hides resources a role cannot view', meta.patients && !meta.lab_orders && !meta.users === false);
 
   section('Patient registration');
   const pats = (await call(tk.reception, 'GET', '/r/patients?limit=50')).data.rows;

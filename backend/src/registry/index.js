@@ -25,6 +25,7 @@ const MODULES = [
 const CUSTOM_PAGES = [
   { module: 'dashboard', label: 'Dashboard', to: '/', perm: 'dashboard.view' },
   { module: 'front', label: 'Start Visit (Check-in)', to: '/visit-start', perm: 'visits.start' },
+  { module: 'front', label: 'Patient Payments (Bills / Tests / X-ray)', to: '/front-payments', perm: 'billing.cashier' },
   { module: 'front', label: 'Queue Board', to: '/queue', perm: 'queue.view' },
   { module: 'clinical', label: 'My Consultations', to: '/consult', perm: 'consult.use' },
   { module: 'dental', label: 'Dental Chart', to: '/dental-chart', perm: 'dental.chart' },

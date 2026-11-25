@@ -45,7 +45,7 @@ const fc = (f: string) => (f?.startsWith('Critical') ? 'flag-C' : f === 'High' |
       </div>
       <div v-if="cur" class="card">
         <div class="bar"><div><h2 style="margin:0">{{ cur.order_no }} — {{ cur.full_name }}</h2><div class="small muted">{{ cur.mrn }} · {{ cur.gender }} · ordered by {{ cur.doctor }}</div></div><div class="sp"></div>
-          <NuxtLink v-if="can('lab_orders.view')" :to="`/print/lab/${cur.id}`" class="btn">🖨 Report</NuxtLink></div>
+          <NuxtLink v-if="can('lab_orders.view')" :to="`/print/lab-slip/${cur.id}`" class="btn">🖨 Collection slip</NuxtLink><NuxtLink v-if="can('lab_orders.view')" :to="`/print/lab/${cur.id}`" class="btn">🖨 Report</NuxtLink></div>
         <div v-if="cur.status === 'Ordered'" class="alert info">Sample not collected yet. <button class="p sm" :disabled="busy" @click="collect(cur)">Collect sample</button></div>
         <div v-if="cur.specimens.length" class="small" style="margin-bottom:8px"><b>Specimens:</b> <span v-for="s in cur.specimens" :key="s.id" class="badge" :class="badgeClass(s.status)" style="margin-right:6px">{{ s.barcode }} · {{ s.sample_type }} · {{ s.status }}</span>
           <button v-for="s in cur.specimens.filter((x: any) => x.status !== 'Rejected')" :key="'r' + s.id" class="sm danger" @click="rejectSpec(s)">Reject {{ s.barcode }}</button></div>

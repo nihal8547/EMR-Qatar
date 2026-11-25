@@ -140,6 +140,26 @@ router.get('/lab/critical', need('lab.work'), wrap(async (req, res) => {
   res.json(rows);
 }));
 
+/** Sample collection slip: patient, order, tests grouped by sample/tube, specimen barcodes. */
+router.get('/lab/orders/:id/slip', need('lab_orders.view'), wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1 || id > 2147483647) throw notFound('Order not found');
+  const o = (await db.query(
+    `SELECT o.id, o.order_no, o.status, o.priority, o.ordered_at, o.notes, p.mrn, p.full_name, p.dob, p.gender, p.phone, d.full_name AS doctor, v.visit_no
+       FROM "lab"."lab_orders" o JOIN "mpi"."patients" p ON p.id=o.patient_id LEFT JOIN "auth"."users" d ON d.id=o.doctor_id LEFT JOIN "scheduling"."visits" v ON v.id=o.visit_id
+      WHERE o.id=$1 AND o.is_deleted=false`, [id])).rows[0];
+  if (!o) throw notFound('Order not found');
+  const tests = (await db.query(
+    `SELECT t.code, t.name, t.sample_type, t.tat_hours FROM "lab"."lab_order_items" i JOIN "lab"."lab_tests" t ON t.id=i.test_id
+      WHERE i.order_id=$1 AND i.is_deleted=false ORDER BY t.sample_type, t.name`, [id])).rows;
+  const specimens = (await db.query(
+    `SELECT s.barcode, s.sample_type, s.collected_at, s.status, u.full_name AS collected_by FROM "lab"."specimens" s LEFT JOIN "auth"."users" u ON u.id=s.collected_by
+      WHERE s.order_id=$1 AND s.is_deleted=false ORDER BY s.id`, [id])).rows;
+  const s = (await db.query(`SELECT key, value FROM "admin"."settings" WHERE key IN ('centre_name','centre_address','centre_phone') AND is_deleted=false`)).rows;
+  await audit(null, req.user, 'LAB_SLIP_PRINT', 'lab_orders', id, null, req.ip);
+  res.json({ order: o, tests, specimens, centre: Object.fromEntries(s.map((r) => [r.key, r.value])) });
+}));
+
 /** Printable report payload (only validated results). */
 router.get('/lab/orders/:id/report', need('lab_orders.view'), wrap(async (req, res) => {
   const id = Number(req.params.id);

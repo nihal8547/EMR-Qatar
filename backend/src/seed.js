@@ -50,7 +50,7 @@ const ROLES = [
   {
     name: 'Receptionist', description: 'Registration, appointments, check-in', restrict: false, discount: 5,
     perms: [
-      'dashboard.view', 'visits.start', 'billing.discount', 'queue.view', 'patients:vce', 'patient_family:vced', 'patient_allergies:v', 'patient_documents:vce', 'consents:vce',
+      'dashboard.view', 'visits.start', 'billing.cashier', 'billing.discount', 'invoices:v', 'payments:v', 'queue.view', 'patients:vce', 'patient_family:vced', 'patient_allergies:v', 'patient_documents:vce', 'consents:vce',
       'appointments:vced', 'doctor_schedules:v', 'visits:ve', 'policy_members:vce', 'payers:v', 'plans:v', 'eligibility_checks:v', 'corporate_accounts:v', 'users:v', ...LOOKUPS,
     ],
   },

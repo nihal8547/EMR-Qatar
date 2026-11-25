@@ -20,6 +20,7 @@ router.get('/billing/worklist', need('billing.cashier'), wrap(async (req, res) =
   const { rows } = await db.query(
     `SELECT v.id, v.visit_no, v.visit_date, v.status, v.payer_type, p.mrn, p.full_name,
             COALESCE((SELECT SUM(c.amount) FROM "billing"."charges" c WHERE c.visit_id=v.id AND c.status='Pending' AND c.is_deleted=false),0) AS pending_amount,
+            COALESCE((SELECT string_agg(DISTINCT c.source, ',') FROM "billing"."charges" c WHERE c.visit_id=v.id AND c.status='Pending' AND c.is_deleted=false),'') AS sources,
             (SELECT i.invoice_no FROM "billing"."invoices" i WHERE i.visit_id=v.id AND i.status <> 'Cancelled' AND i.is_deleted=false ORDER BY i.id DESC LIMIT 1) AS invoice_no,
             (SELECT i.balance FROM "billing"."invoices" i WHERE i.visit_id=v.id AND i.status <> 'Cancelled' AND i.is_deleted=false ORDER BY i.id DESC LIMIT 1) AS balance
        FROM "scheduling"."visits" v JOIN "mpi"."patients" p ON p.id=v.patient_id
