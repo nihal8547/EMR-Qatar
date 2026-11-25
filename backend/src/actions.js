@@ -1,7 +1,7 @@
 'use strict';
 /** Handlers for resource actions declared in the registry (Approve, Post, Generate ...). */
 const db = require('./db');
-const { bad, conflict, notFound, round2 } = require('./lib');
+const { bad, conflict, notFound, forbidden, round2 } = require('./lib');
 const billing = require('./billingCore');
 
 const map = {};
@@ -136,6 +136,35 @@ def('refunds', 'approve', async ({ client, user, row }) => {
 def('refunds', 'reject', async ({ client, user, row }) => {
   mustBe(row, 'Requested');
   await client.query(`UPDATE "billing"."refunds" SET status='Rejected', approved_by=$1, updated_at=now() WHERE id=$2`, [user.id, row.id]);
+});
+
+def('bill_cancel_requests', 'approve', async ({ client, user, row }) => {
+  mustBe(row, 'Requested');
+  const inv = (await client.query(`SELECT * FROM "billing"."invoices" WHERE id=$1 AND is_deleted=false FOR UPDATE`, [row.invoice_id])).rows[0];
+  if (!inv) throw notFound('Invoice not found');
+  if (inv.status === 'Cancelled') throw conflict('Bill is already cancelled');
+  const claim = (await client.query(`SELECT 1 FROM "insurance"."claims" WHERE invoice_id=$1 AND status NOT IN ('Rejected') AND is_deleted=false LIMIT 1`, [inv.id])).rows.length;
+  if (claim) throw conflict('A claim exists for this bill. Reject or withdraw the claim first.');
+  if (row.requested_by === user.id && !user.perms.has('billing.approve_discount')) throw forbidden('You cannot approve your own request');
+  const paid = round2(inv.paid);
+  if (paid > 0) {                       // refund what the patient paid, in the approver's session
+    const session = (await client.query(`SELECT id FROM "billing"."cashier_sessions" WHERE user_id=$1 AND status='Open' AND is_deleted=false LIMIT 1`, [user.id])).rows[0];
+    const code = await db.nextCode(client, 'RCP', 6);
+    await client.query(
+      `INSERT INTO "billing"."payments"("receipt_no","invoice_id","patient_id","kind","amount","method","reference","cashier_id","session_id","paid_at","created_by","updated_by")
+       VALUES ($1,$2,$3,'Refund',$4,'Cash',$5,$6,$7,now(),$6,$6)`, [code, inv.id, inv.patient_id, paid, row.request_no, user.id, session ? session.id : null]);
+  }
+  await client.query(`UPDATE "billing"."invoices" SET status='Cancelled', paid=0, balance=0, notes = COALESCE(notes,'') || $2, updated_at=now() WHERE id=$1`, [inv.id, ` [Cancelled via ${row.request_no}: ${row.reason}]`]);
+  await client.query(`UPDATE "billing"."charges" SET status=$2, invoice_id=NULL, updated_at=now() WHERE invoice_id=$1 AND status='Invoiced'`, [inv.id, row.void_charges ? 'Cancelled' : 'Pending']);
+  if (inv.visit_id) await client.query(`UPDATE "scheduling"."visits" SET status='Billing', closed_at=NULL, updated_at=now() WHERE id=$1 AND status='Completed'`, [inv.visit_id]);
+  await client.query(`UPDATE "billing"."bill_cancel_requests" SET status='Approved', decided_by=$1, decided_at=now(), refund_amount=$3, updated_at=now() WHERE id=$2`, [user.id, row.id, paid]);
+  return { refunded: paid };
+});
+def('bill_cancel_requests', 'reject', async ({ client, user, row, body }) => {
+  mustBe(row, 'Requested');
+  const note = String((body && body.reason) || '').trim();
+  if (note.length < 3) throw bad('Enter a reason for rejecting');
+  await client.query(`UPDATE "billing"."bill_cancel_requests" SET status='Rejected', decided_by=$1, decided_at=now(), decision_note=$3, updated_at=now() WHERE id=$2`, [user.id, row.id, note]);
 });
 
 def('credit_notes', 'approve', async ({ client, row }) => {

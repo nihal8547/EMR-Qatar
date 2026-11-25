@@ -165,6 +165,22 @@ const section = (t) => console.log(`\n== ${t}`);
   const cs = await call(tk.cashier, 'POST', '/billing/session/close', { closing_cash: 100 + half });
   ok('cashier session closed with zero variance', cs.status === 200 && Number(cs.data.variance) === 0, cs.data);
 
+  section('Bill cancel request / approval');
+  const bc1 = await call(tk.reception, 'POST', '/r/bill_cancel_requests', { invoice_id: invId, reason: 'Billed to the wrong patient' });
+  ok('front office raises a bill cancel request', (bc1.status === 200 || bc1.status === 201) && bc1.data.status === 'Requested', bc1.data);
+  ok('duplicate open request refused (409)', (await call(tk.reception, 'POST', '/r/bill_cancel_requests', { invoice_id: invId, reason: 'duplicate attempt here' })).status === 409);
+  ok('short reason refused (400)', (await call(tk.reception, 'POST', '/r/bill_cancel_requests', { invoice_id: 999999, reason: 'x' })).status >= 400);
+  ok('front office cannot approve (403)', (await call(tk.reception, 'POST', `/r/bill_cancel_requests/${bc1.data.id}/action/approve`, {})).status === 403);
+  ok('reject needs a reason (400)', (await call(tk.cashier, 'POST', `/r/bill_cancel_requests/${bc1.data.id}/action/reject`, {})).status === 400);
+  const rj = await call(tk.cashier, 'POST', `/r/bill_cancel_requests/${bc1.data.id}/action/reject`, { reason: 'Please check with the manager' });
+  ok('cashier rejects with a reason', rj.status === 200 && rj.data.record.status === 'Rejected', rj.data);
+  const bc2 = await call(tk.reception, 'POST', '/r/bill_cancel_requests', { invoice_id: invId, reason: 'Billed to the wrong patient', void_charges: true });
+  const bcAp = await call(tk.cashier, 'POST', `/r/bill_cancel_requests/${bc2.data.id}/action/approve`, {});
+  ok('cashier approves: bill cancelled and paid amount refunded', bcAp.status === 200 && bcAp.data.record.status === 'Approved' && Number(bcAp.data.refunded) > 0, bcAp.data);
+  const afterInv = await call(tk.cashier, 'GET', `/billing/invoices/${invId}`);
+  ok('invoice is Cancelled with refund payment', afterInv.data.invoice.status === 'Cancelled' && afterInv.data.payments.some((x) => x.kind === 'Refund'), afterInv.data.invoice);
+  ok('cancel request cannot be approved twice (409)', (await call(tk.cashier, 'POST', `/r/bill_cancel_requests/${bc2.data.id}/action/approve`, {})).status === 409);
+
   section('Insurance visit + claim');
   const pol = (await call(tk.reception, 'GET', '/r/policy_members?limit=50')).data.rows.find((x) => x.patient_id === anita.id);
   const v2 = await call(tk.reception, 'POST', '/visits/start', { patient_id: anita.id, doctor_id: sara.id, payer_type: 'Insurance', policy_id: pol.id, complaint: 'Review' });

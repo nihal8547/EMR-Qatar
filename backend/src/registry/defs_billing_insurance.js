@@ -115,6 +115,24 @@ module.exports = (R) => {
     actions: [{ name: 'approve', label: 'Approve & pay refund', confirm: true }, { name: 'reject', label: 'Reject', confirm: true }],
   });
 
+  R('bill_cancel_requests', 'billing', 'Bill Cancel Requests', [
+    'request_no:text:Request no:list,search,uniq,auto=BCR/6',
+    'invoice_id:ref=invoices:Invoice:req,list',
+    'reason:text:Reason for cancelling:req,list',
+    'void_charges:bool:Also void the charges (not just the bill):def=false',
+    'status:select=Requested/Approved/Rejected:Status:ro,list,filter,def=Requested',
+    'requested_by:ref=users:Requested by:ro,list',
+    'requested_at:datetime:Requested at:ro,list',
+    'decided_by:ref=users:Decided by:ro,list',
+    'decided_at:datetime:Decided at:ro',
+    'decision_note:text:Decision note:ro,list',
+    'refund_amount:money:Refunded to patient:ro',
+  ], {
+    schema: 'billing', menu: false, singular: 'Bill cancel request', disp: ['request_no'], hooks: { before: 'billCancelBefore' },
+    help: 'Front office raises the request; a cashier / manager approves or rejects it. Approving cancels the bill and refunds any amount already paid.',
+    actions: [{ name: 'approve', label: 'Approve & cancel bill', confirm: true }, { name: 'reject', label: 'Reject', confirm: true }],
+  });
+
   R('credit_notes', 'billing', 'Credit Notes', [
     'cn_no:text:Credit note no:list,search,uniq,auto=CN/6',
     'invoice_id:ref=invoices:Invoice:req,list',

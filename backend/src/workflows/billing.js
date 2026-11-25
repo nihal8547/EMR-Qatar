@@ -42,7 +42,10 @@ async function invoiceBundle(id) {
   const payments = (await db.query(
     `SELECT p.id, p.receipt_no, p.kind, p.amount, p.method, p.reference, p.paid_at, u.full_name AS cashier FROM "billing"."payments" p LEFT JOIN "auth"."users" u ON u.id=p.cashier_id WHERE p.invoice_id=$1 AND p.is_deleted=false ORDER BY p.id`, [id])).rows;
   const s = (await db.query(`SELECT key, value FROM "admin"."settings" WHERE key IN ('centre_name','centre_address','centre_phone','tax_note') AND is_deleted=false`)).rows;
-  return { invoice: inv, lines, payments, centre: Object.fromEntries(s.map((r) => [r.key, r.value])) };
+  const cancel_request = (await db.query(
+    `SELECT r.id, r.request_no, r.reason, r.void_charges, r.requested_at, u.full_name AS requested_by FROM "billing"."bill_cancel_requests" r LEFT JOIN "auth"."users" u ON u.id=r.requested_by
+      WHERE r.invoice_id=$1 AND r.status='Requested' AND r.is_deleted=false ORDER BY r.id DESC LIMIT 1`, [id])).rows[0] || null;
+  return { invoice: inv, lines, payments, cancel_request, centre: Object.fromEntries(s.map((r) => [r.key, r.value])) };
 }
 
 router.get('/billing/visit/:visitId', need('billing.cashier'), wrap(async (req, res) => {

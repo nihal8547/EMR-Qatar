@@ -49,6 +49,18 @@ async function takePayment() {
   const r = await run(() => api(`/billing/invoices/${inv.value.id}/pay`, { method: 'POST', body: { amount: pay.amount, method: pay.method, reference: pay.reference } }), 'Payment recorded')
   if (r) { pay.reference = ''; await Promise.all([loadVisit(), loadList(), loadSess()]) }
 }
+async function requestCancel() {
+  const reason = prompt('Reason for cancelling this bill (required):'); if (!reason) return
+  const voidIt = confirm('Also void the charges (they will NOT be billed again)?\nOK = void charges · Cancel = keep charges to be re-billed')
+  if (await run(() => api('/r/bill_cancel_requests', { method: 'POST', body: { invoice_id: inv.value.id, reason, void_charges: voidIt } }), 'Cancel request sent for approval')) await loadVisit()
+}
+async function decideCancel(approve: boolean) {
+  const cr = d.value.invoice.cancel_request; let body: any = {}
+  if (!approve) { const reason = prompt('Reason for rejecting:'); if (!reason) return; body = { reason } }
+  else if (!confirm(`Approve ${cr.request_no}? The bill will be cancelled${Number(inv.value.paid) > 0 ? ' and ' + money(inv.value.paid) + ' refunded in cash' : ''}.`)) return
+  const r = await run(() => api(`/r/bill_cancel_requests/${cr.id}/action/${approve ? 'approve' : 'reject'}`, { method: 'POST', body }), approve ? 'Bill cancelled' : 'Request rejected')
+  if (r) { await Promise.all([loadVisit(), loadList(), loadSess()]) }
+}
 async function cancelInvoice() { const reason = prompt('Reason for cancelling this invoice:'); if (!reason) return; if (await run(() => api(`/billing/invoices/${inv.value.id}/cancel`, { method: 'POST', body: { reason } }), 'Invoice cancelled')) { await loadVisit(); loadList() } }
 async function openSession() { if (await run(() => api('/billing/session/open', { method: 'POST', body: { opening_cash: openCash.value || 0 } }), 'Session opened')) { loadSess(); loadVisit() } }
 async function closeSession() {
@@ -84,11 +96,16 @@ async function closeSession() {
           <span v-if="d.checkin_discount.status === 'Pending approval' && can('billing.approve_discount')"> <button class="sm ok" @click="decideCheckin(true)">Approve</button> <button class="sm danger" @click="decideCheckin(false)">Reject</button></span>
           <span v-else-if="d.checkin_discount.status === 'Pending approval'" class="small"> · invoice stays at full price until a manager approves.</span>
         </div>
+        <div v-if="d.invoice?.cancel_request" class="alert warn">
+          <b>Bill cancel requested</b> ({{ d.invoice.cancel_request.request_no }}) by {{ d.invoice.cancel_request.requested_by }} — {{ d.invoice.cancel_request.reason }}<span v-if="d.invoice.cancel_request.void_charges"> · charges will be voided</span>
+          <span v-if="can('bill_cancel_requests.approve')"> <button class="sm ok" :disabled="busy" @click="decideCancel(true)">Approve</button> <button class="sm danger" :disabled="busy" @click="decideCancel(false)">Reject</button></span>
+          <span v-else class="small"> · waiting for a cashier / manager to approve.</span></div>
         <div class="card">
           <div class="bar"><h2 style="margin:0">Invoice <span v-if="inv">{{ inv.invoice_no }}</span></h2><div class="sp"></div><span v-if="inv" class="badge" :class="badgeClass(inv.status)">{{ inv.status }}</span>
             <NuxtLink v-if="inv" :to="`/print/invoice/${inv.id}`" class="btn sm">🖨 Print</NuxtLink></div>
           <div class="bar"><label class="small muted">Discount %</label><input type="number" min="0" max="100" step="any" v-model.number="disc" style="width:90px" @input="discTouched = true" :disabled="!can('billing.discount') && !can('billing.approve_discount')" /><span v-if="!can('billing.discount') && !can('billing.approve_discount')" class="small muted">no discount rights</span>
             <button class="p" :disabled="busy || (!d.pending.length && !inv)" @click="makeInvoice">{{ inv ? 'Add new charges / refresh invoice' : 'Create invoice' }}</button>
+            <button v-if="inv && inv.status !== 'Cancelled' && !d.invoice.cancel_request && can('bill_cancel_requests.create') && !can('billing.approve_discount')" :disabled="busy" @click="requestCancel">Request bill cancel</button>
             <button v-if="inv && can('billing.approve_discount') && Number(inv.paid) === 0 && inv.status !== 'Cancelled'" class="danger" @click="cancelInvoice">Cancel invoice</button></div>
           <template v-if="inv">
             <table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Amount</th></tr></thead><tbody><tr v-for="l in d.invoice.lines" :key="l.id"><td>{{ l.description }}</td><td class="num">{{ l.qty }}</td><td class="num">{{ money(l.amount) }}</td></tr></tbody></table>

@@ -165,6 +165,18 @@ const H = {
   },
 
   async requestedByBefore(ctx) { if (ctx.mode === 'create') ctx.data.requested_by = ctx.user.id; },
+  async billCancelBefore(ctx) {
+    if (ctx.mode === 'update') throw conflict('A cancel request cannot be edited; reject it and raise a new one');
+    const d = ctx.data;
+    const inv = (await ctx.client.query(`SELECT id, invoice_no, status FROM "billing"."invoices" WHERE id=$1 AND is_deleted=false`, [d.invoice_id])).rows[0];
+    if (!inv) throw bad('Invoice not found');
+    if (inv.status === 'Cancelled') throw conflict('This bill is already cancelled');
+    const dup = (await ctx.client.query(`SELECT request_no FROM "billing"."bill_cancel_requests" WHERE invoice_id=$1 AND status='Requested' AND is_deleted=false`, [d.invoice_id])).rows[0];
+    if (dup) throw conflict(`A cancel request (${dup.request_no}) is already waiting for approval`);
+    if (String(d.reason || '').trim().length < 5) throw bad('Enter a reason (at least 5 characters)');
+    d.status = 'Requested'; d.requested_by = ctx.user.id; d.requested_at = new Date().toISOString();
+    delete d.decided_by; delete d.decided_at; delete d.decision_note; delete d.refund_amount;
+  },
   async reportedByBefore(ctx) { if (ctx.mode === 'create') ctx.data.reported_by = ctx.user.id; },
 
   /* ----- inventory / finance / hr ----- */
