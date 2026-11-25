@@ -250,7 +250,9 @@ router.get('/consult/list', consultGuard, wrap(async (req, res) => {
   const doctorId = req.query.doctor_id && mayViewOthers ? Number(req.query.doctor_id) : req.user.id;
   const { rows } = await db.query(
     `SELECT v.id, v.visit_no, v.token_no, v.status, v.complaint, v.visit_type, v.payer_type, p.mrn, p.full_name, p.dob, p.gender,
-            EXTRACT(EPOCH FROM (now() - v.created_at))/60 AS waiting_min
+            EXTRACT(EPOCH FROM (now() - v.created_at))/60 AS waiting_min,
+            (SELECT COUNT(*)::int FROM "mpi"."patient_allergies" a WHERE a.patient_id=p.id AND a.is_deleted=false) AS allergies,
+            (SELECT x.triage_level FROM "clinical"."vitals" x WHERE x.visit_id=v.id AND x.is_deleted=false ORDER BY x.id DESC LIMIT 1) AS triage_level
        FROM "scheduling"."visits" v JOIN "mpi"."patients" p ON p.id=v.patient_id
       WHERE v.doctor_id=$1 AND v.visit_date=CURRENT_DATE AND v.is_deleted=false AND v.status NOT IN ('Cancelled')
       ORDER BY (v.status='Completed'), v.token_no`, [doctorId]);
@@ -510,6 +512,7 @@ router.post('/consult/:visitId/complete', consultGuard, wrap(async (req, res) =>
     const pendRx = (await client.query(`SELECT 1 FROM "clinical"."prescriptions" WHERE visit_id=$1 AND status IN ('Pending','Partially Dispensed') AND is_deleted=false LIMIT 1`, [vid])).rows.length;
     const next = pendLab || pendImg ? 'Diagnostics' : pendRx ? 'Pharmacy' : 'Billing';
     await client.query(`UPDATE "scheduling"."visits" SET status=$1, updated_at=now() WHERE id=$2`, [next, vid]);
+    if (next === 'Billing') await require('../billingCore').settleVisit(client, vid);
     await audit(client, req.user, 'CONSULT_COMPLETE', 'visits', vid, { next }, req.ip);
     return { next_status: next };
   });

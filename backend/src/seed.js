@@ -67,7 +67,7 @@ const ROLES = [
       'dashboard.view', 'pricing.view', 'queue.view', 'consult.use', 'patients.360', 'patients:v', 'patient_allergies:vce', 'patient_family:v', 'patient_documents:v', 'consents:v',
       'appointments:v', 'visits:v', 'vitals:v', 'nursing_notes:v', 'encounters:vce', 'diagnoses:vced', 'diagnosis_codes:v', 'prescriptions:vce', 'prescription_items:vced',
       'procedure_orders:vced', 'certificates:vced', 'referrals:vced', 'lab_orders:v', 'lab_order_items:v', 'lab_tests:v', 'lab_panels:v', 'imaging_orders:v', 'imaging_reports:v',
-      'drugs:v', 'drug_interactions:v', 'services:v', 'doctor_schedules:v', 'users:v', ...LOOKUPS,
+      'drugs:v', 'drug_interactions:v', 'services:v', 'imaging_modalities:v', 'doctor_schedules:v', 'users:v', ...LOOKUPS,
       'dental.chart', 'dental.complete', 'dental_chart_entries:vced', 'dental_treatment_plans:vce', 'dental_plan_items:vced',
     ],
   },
@@ -85,7 +85,7 @@ const ROLES = [
   {
     name: 'Pharmacist', description: 'Dispensing, OTC sales, drug master, pharmacy stock', restrict: false, discount: 0,
     perms: [
-      'dashboard.view', 'pricing.view', 'pharmacy.dispense', 'pharmacy.pos', 'pharmacy.stock', 'patients:v', 'visits:v', 'patient_allergies:v', 'prescriptions:v', 'prescription_items:v',
+      'dashboard.view', 'pricing.view', 'billing.cashier', 'pharmacy.dispense', 'pharmacy.pos', 'pharmacy.stock', 'patients:v', 'visits:v', 'patient_allergies:v', 'prescriptions:v', 'prescription_items:v',
       'drugs:vce', 'drug_interactions:vce', 'pharmacy_dispenses:v', 'dispense_items:v', 'controlled_register:v', 'otc_sales:v', 'otc_sale_items:v',
       'stock_batches:v', 'stock_ledger:v', 'stores:v', 'items:v', 'requisitions:vce', 'requisition_items:vced', 'stock_adjustments:vce', 'users:v', ...LOOKUPS,
     ],

@@ -34,6 +34,16 @@ function computeSplit({ charges, payer_type, plan, discountPct = 0 }) {
   return { gross, discount, net, patient_share: patient, payer_share: round2(net - patient) };
 }
 
+/** A visit in Billing is completed once every charge is invoiced and every invoice is settled. */
+async function settleVisit(client, visitId) {
+  await client.query(
+    `UPDATE "scheduling"."visits" v SET status='Completed', closed_at=COALESCE(closed_at, now()), updated_at=now()
+      WHERE v.id=$1 AND v.status='Billing'
+        AND EXISTS (SELECT 1 FROM "billing"."invoices" i WHERE i.visit_id=v.id AND i.status <> 'Cancelled' AND i.is_deleted=false)
+        AND NOT EXISTS (SELECT 1 FROM "billing"."invoices" i WHERE i.visit_id=v.id AND i.status <> 'Cancelled' AND i.is_deleted=false AND i.balance > 0.005)
+        AND NOT EXISTS (SELECT 1 FROM "billing"."charges" c WHERE c.visit_id=v.id AND c.status='Pending' AND c.is_deleted=false)`, [visitId]);
+}
+
 /** Recompute paid / balance / status of an invoice from its payments. Marks the visit completed when settled. */
 async function refreshInvoice(client, invoiceId) {
   const inv = (await client.query(`SELECT * FROM "billing"."invoices" WHERE id=$1`, [invoiceId])).rows[0];
@@ -50,11 +60,7 @@ async function refreshInvoice(client, invoiceId) {
     else status = 'Issued';
   }
   await client.query(`UPDATE "billing"."invoices" SET paid=$1, balance=$2, status=$3, updated_at=now() WHERE id=$4`, [paid, balance, status, invoiceId]);
-  if (status === 'Paid' && inv.visit_id) {
-    await client.query(
-      `UPDATE "scheduling"."visits" SET status='Completed', closed_at=COALESCE(closed_at, now()), updated_at=now()
-        WHERE id=$1 AND status NOT IN ('Cancelled')`, [inv.visit_id]);
-  }
+  if (inv.visit_id) await settleVisit(client, inv.visit_id);
   return { paid, balance, status };
 }
 
@@ -75,7 +81,8 @@ async function createOrRefreshInvoice(client, user, visitId, opts = {}) {
   const charges = (await client.query(
     `SELECT c.id, c.amount, s.covered FROM "billing"."charges" c JOIN "billing"."services" s ON s.id=c.service_id
       WHERE c.visit_id=$1 AND c.is_deleted=false AND c.status <> 'Cancelled'
-        AND (c.status='Pending' OR ($2::bigint IS NOT NULL AND c.invoice_id=$2))`, [visitId, existing ? existing.id : null])).rows;
+        AND ((c.status='Pending' AND ($3::bigint[] IS NULL OR c.id = ANY($3::bigint[]))) OR ($2::bigint IS NOT NULL AND c.invoice_id=$2))`,
+    [visitId, existing ? existing.id : null, Array.isArray(opts.only_charge_ids) ? opts.only_charge_ids : null])).rows;
   if (!charges.length) throw bad('No charges to invoice for this visit');
 
   // discount control
@@ -188,4 +195,4 @@ async function payInvoice(client, user, invoiceId, { amount, method, reference }
   return { payment_id: pid, receipt_no: receipt, ...state };
 }
 
-module.exports = { computeSplit, refreshInvoice, createOrRefreshInvoice, reprice, payInvoice, corporateOutstanding };
+module.exports = { settleVisit, computeSplit, refreshInvoice, createOrRefreshInvoice, reprice, payInvoice, corporateOutstanding };

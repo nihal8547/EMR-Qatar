@@ -86,12 +86,12 @@ async function workflows() {
     if (finish) await must('complete', docUser, 'POST', `/consult/${vid}/complete`, {});
     if (rxr) {
       const pq = (await call('pharmacist', 'GET', '/pharmacy/queue')).data; const row = (Array.isArray(pq) ? pq : pq.rows || []).find((r) => r.id === rxr.id);
-      if (row) await must('dispense', 'pharmacist', 'POST', '/pharmacy/dispense', { prescription_id: rxr.id, items: row.items.map((i) => ({ item_id: i.id, prescription_item_id: i.id, qty: i.qty })), witness });
+      if (row) await must('dispense', 'pharmacist', 'POST', '/pharmacy/dispense', { prescription_id: rxr.id, items: row.items.map((i) => ({ item_id: i.id, prescription_item_id: i.id, qty: i.qty })), witness, payment: { method: 'Card', reference: 'DEMO-PH' } });
     }
     let inv = null;
     if (invoice) inv = await must('invoice', 'cashier', 'POST', `/billing/visit/${vid}/invoice`, {});
-    if (inv && pay) {
-      const i = inv.invoice; const due = Number(i.patient_share || i.net);
+    if (inv && pay && Number(inv.invoice.balance) > 0.005) {
+      const i = inv.invoice; const due = Number(i.balance);
       await must('pay', 'cashier', 'POST', `/billing/invoices/${i.id}/pay`, { amount: method === 'Cash' ? Math.round(due / 2 * 100) / 100 : due, method, reference: method === 'Cash' ? undefined : 'DEMO-REF' });
       if (method === 'Cash') await must('pay2', 'cashier', 'POST', `/billing/invoices/${i.id}/pay`, { amount: Math.round((due - Math.round(due / 2 * 100) / 100) * 100) / 100, method: 'Card', reference: 'DEMO-CARD' });
     }

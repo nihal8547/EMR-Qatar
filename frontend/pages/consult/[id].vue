@@ -15,6 +15,12 @@ const proc = reactive<any>({ service_id: null, notes: '' })
 const rx = ref<any[]>([{ drug_id: null, dose: '', frequency: '', duration_days: null, qty: null, instructions: '' }])
 const warnings = ref<any[]>([]); const blocked = ref(false)
 const followUp = ref('')
+const testItems = computed(() => tests.value.map((t: any) => ({ id: t.id, name: t.name, sub: t.code, group: t.sample_type, price: undefined })))
+const testGroups = computed(() => [...new Set(tests.value.map((t: any) => t.sample_type).filter(Boolean))] as string[])
+const radItems = computed(() => radSvc.value.map((x: any) => ({ id: x.id, name: x.name, sub: x.code, price: x.price })))
+const procItems = computed(() => procSvc.value.map((x: any) => ({ id: x.id, name: x.name, sub: x.code, price: x.price })))
+const panelItems = computed(() => panels.value.map((x: any) => ({ id: x.id, name: x.name })))
+const modName = (id: number) => modalities.value.find((m: any) => m.id === id)?.name
 
 async function load() {
   try {
@@ -24,7 +30,7 @@ async function load() {
   } catch (e) { err(e) }
 }
 async function loadCatalogs() {
-  const get = async (p: string, q: any = {}) => { try { return (await api(p, { query: { limit: 200, ...q } })).rows } catch { return [] } }
+  const get = async (p: string, q: any = {}) => { if (!can(p.replace('/r/', '') + '.view')) return []; try { return (await api(p, { query: { limit: 200, ...q } })).rows } catch { return [] } }
   ;[tests.value, panels.value, radSvc.value, modalities.value, procSvc.value] = await Promise.all([
     get('/r/lab_tests', { active: 'true', sort: 'name', dir: 'asc' }), get('/r/lab_panels'), get('/r/services', { category: 'Radiology' }), get('/r/imaging_modalities'), get('/r/services', { category: 'Procedure' })])
 }
@@ -58,7 +64,7 @@ async function complete() {
   if (r) { ok(`Done. Patient moved to: ${r.next_status}`); navigateTo('/consult') }
 }
 const flagCls = (f: string) => (f?.startsWith('Critical') ? 'flag-C' : f === 'High' || f === 'Low' ? 'flag-H' : '')
-const tabs = [['notes', 'Consultation'], ['orders', 'Lab / Imaging / Procedures'], ['rx', 'Prescription'], ['history', 'History']]
+const tabs = computed(() => [['notes', 'Consultation', d.value?.diagnoses?.length || 0], ['orders', 'Lab / Imaging / Procedures', (d.value?.lab_orders?.length || 0) + (d.value?.imaging_orders?.length || 0) + (d.value?.procedures?.length || 0)], ['rx', 'Prescription', d.value?.prescriptions?.length || 0], ['history', 'History', d.value?.past_visits?.length || 0]] as [string, string, number][])
 </script>
 <template>
   <div v-if="d">
@@ -66,16 +72,16 @@ const tabs = [['notes', 'Consultation'], ['orders', 'Lab / Imaging / Procedures'
       <NuxtLink v-if="can('patients.360')" :to="`/patient/${d.patient.id}`" class="btn">Patient 360</NuxtLink>
       <NuxtLink :to="`/r/certificates/new?visit_id=${vid}`" class="btn">Medical certificate</NuxtLink><NuxtLink :to="`/r/referrals/new?visit_id=${vid}`" class="btn">Referral</NuxtLink>
     </div>
-    <div class="card">
+    <div class="card sticky-hdr">
       <div class="bar" style="margin:0"><h1 style="margin:0">{{ d.patient.full_name }}</h1><span class="muted">{{ d.patient.mrn }} · {{ d.patient.age }} y · {{ d.patient.gender }} · {{ d.patient.blood_group || 'blood group n/a' }}</span><div class="sp"></div><span class="badge" :class="badgeClass(d.visit.status)">{{ d.visit.status }}</span><span class="badge">{{ d.visit.visit_no }} · {{ d.visit.payer_type }}</span></div>
       <div v-if="d.allergies.length" class="alert err" style="margin:10px 0 0"><b>Allergies:</b> <span v-for="a in d.allergies" :key="a.allergen" class="badge red" style="margin-right:4px">{{ a.allergen }}{{ a.reaction ? ' – ' + a.reaction : '' }}{{ a.severity ? ' (' + a.severity + ')' : '' }}</span></div>
       <div v-else class="muted small" style="margin-top:8px">No known allergies recorded.</div>
-      <div v-if="d.vitals" class="small" style="margin-top:8px"><b>Vitals:</b> Temp {{ d.vitals.temperature ?? '–' }}°C · Pulse {{ d.vitals.pulse ?? '–' }} · BP {{ d.vitals.bp_systolic ?? '–' }}/{{ d.vitals.bp_diastolic ?? '–' }} · SpO₂ {{ d.vitals.spo2 ?? '–' }}% · Wt {{ d.vitals.weight_kg ?? '–' }} kg <span class="muted">({{ d.vitals.triage_level }})</span></div>
+      <div v-if="d.vitals" class="vt"><div class="vt-i"><b>{{ d.vitals.temperature ?? '–' }}</b><span>Temp °C</span></div><div class="vt-i"><b>{{ d.vitals.pulse ?? '–' }}</b><span>Pulse</span></div><div class="vt-i"><b>{{ d.vitals.bp_systolic ?? '–' }}/{{ d.vitals.bp_diastolic ?? '–' }}</b><span>BP</span></div><div class="vt-i"><b>{{ d.vitals.spo2 ?? '–' }}</b><span>SpO₂ %</span></div><div class="vt-i"><b>{{ d.vitals.weight_kg ?? '–' }}</b><span>Weight kg</span></div><div v-if="d.vitals.triage_level" class="vt-i"><b>{{ d.vitals.triage_level }}</b><span>Triage</span></div></div>
       <div v-else class="muted small" style="margin-top:8px">No vitals recorded yet for this visit.</div>
       <div v-if="d.preauths.length" class="small" style="margin-top:6px"><b>Pre-authorisations:</b> <span v-for="p in d.preauths" :key="p.auth_no" class="badge" :class="badgeClass(p.status)" style="margin-right:4px">{{ p.name }}: {{ p.status }}</span></div>
     </div>
     <div v-if="done" class="alert info">This consultation is completed. Notes are locked; use the History tab or ask the doctor in charge for changes.</div>
-    <div class="tabs"><button v-for="t in tabs" :key="t[0]" :class="{ on: tab === t[0] }" @click="tab = t[0]">{{ t[1] }}</button></div>
+    <div class="tabs"><button v-for="t in tabs" :key="t[0]" :class="{ on: tab === t[0] }" @click="tab = t[0]">{{ t[1] }}<span v-if="t[2]" class="badge" style="margin-left:6px">{{ t[2] }}</span></button></div>
 
     <div v-show="tab === 'notes'">
       <div class="card"><h2>Notes</h2>
@@ -100,27 +106,26 @@ const tabs = [['notes', 'Consultation'], ['orders', 'Lab / Imaging / Procedures'
 
     <div v-show="tab === 'orders'">
       <div class="card"><h2>Laboratory</h2>
-        <div v-for="o in d.lab_orders" :key="o.id" class="card" style="padding:10px;background:#fafbfc"><div class="bar" style="margin:0"><b>{{ o.order_no }}</b><span class="badge" :class="badgeClass(o.status)">{{ o.status }}</span><span class="badge grey">{{ o.priority }}</span><div class="sp"></div><button v-if="o.status === 'Ordered' && !done" class="sm danger" @click="cancelOrder('lab', o.id)">Cancel</button></div>
+        <div v-for="o in d.lab_orders" :key="o.id" class="card" style="padding:10px;background:#fafbfc"><div class="bar" style="margin:0"><b>{{ o.order_no }}</b><span class="badge" :class="badgeClass(o.status)">{{ o.status }}</span><span class="badge grey">{{ o.priority }}</span><div class="sp"></div><NuxtLink :to="`/print/lab-slip/${o.id}`" class="btn sm">🖨 Request</NuxtLink><button v-if="o.status === 'Ordered' && !done" class="sm danger" @click="cancelOrder('lab', o.id)">Cancel</button></div>
           <table><tbody><tr v-for="i in o.items" :key="i.id"><td>{{ i.test }}</td><td><span v-if="i.result" :class="flagCls(i.flag)">{{ i.result }} {{ i.unit }}</span><span v-else class="muted">pending</span></td><td><span v-if="i.flag" class="small" :class="flagCls(i.flag)">{{ i.flag }}</span></td><td><span class="badge" :class="badgeClass(i.status)">{{ i.status }}</span></td></tr></tbody></table></div>
-        <div v-if="!done" class="grid g2"><div><label class="f">Pick tests</label><div style="max-height:190px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px"><label v-for="t in tests" :key="t.id" style="display:block"><input type="checkbox" :checked="labSel.ids.includes(t.id)" @change="toggleTest(t.id)" /> {{ t.name }} <span class="muted small">({{ t.sample_type }})</span></label></div></div>
-          <div><label class="f">…or a panel</label><select v-model="labSel.panel"><option :value="null">—</option><option v-for="p in panels" :key="p.id" :value="p.id">{{ p.name }}</option></select><label class="f" style="margin-top:8px">Priority</label><select v-model="labSel.priority"><option>Routine</option><option>Urgent</option><option>STAT</option></select><button class="p" style="margin-top:10px" :disabled="busy || (!labSel.ids.length && !labSel.panel)" @click="orderLab">Order lab tests</button></div></div>
+        <div v-if="!done" class="grid g2"><div><label class="f">Search &amp; pick tests</label><SearchPick v-model="labSel.ids" :items="testItems" :groups="testGroups" multiple placeholder="Search test name or code (e.g. CBC, glucose, HbA1c)" /></div>
+          <div><label class="f">…or a panel</label><select v-model="labSel.panel"><option :value="null">—</option><option v-for="p in panels" :key="p.id" :value="p.id">{{ p.name }}</option></select><label class="f" style="margin-top:8px">Priority</label><select v-model="labSel.priority"><option>Routine</option><option>Urgent</option><option>STAT</option></select><button class="p" style="margin-top:10px" :disabled="busy || (!labSel.ids.length && !labSel.panel)" @click="orderLab">Order {{ labSel.ids.length ? labSel.ids.length + ' test(s)' : 'lab tests' }}</button></div></div>
       </div>
       <div class="card"><h2>Imaging</h2>
-        <table v-if="d.imaging_orders.length"><tbody><tr v-for="o in d.imaging_orders" :key="o.id"><td>{{ o.order_no }}</td><td>{{ o.study }}</td><td><span class="badge" :class="badgeClass(o.status)">{{ o.status }}</span></td><td>{{ o.impression }}</td><td><button v-if="o.status === 'Ordered' && !done" class="sm danger" @click="cancelOrder('imaging', o.id)">Cancel</button></td></tr></tbody></table>
-        <div v-if="!done" class="fgrid" style="margin-top:8px"><div class="field"><label class="f">Study</label><select v-model="img.service_id"><option :value="null">—</option><option v-for="s in radSvc" :key="s.id" :value="s.id">{{ s.name }} ({{ money(s.price) }})</option></select></div>
-          <div class="field"><label class="f">Modality</label><select v-model="img.modality_id"><option :value="null">—</option><option v-for="m in modalities" :key="m.id" :value="m.id">{{ m.name }}</option></select></div>
-          <div class="field wide"><label class="f">Clinical information</label><input v-model="img.clinical_info" /></div></div>
+        <table v-if="d.imaging_orders.length"><tbody><tr v-for="o in d.imaging_orders" :key="o.id"><td>{{ o.order_no }}</td><td><b>{{ o.study }}</b></td><td><span class="badge" :class="badgeClass(o.status)">{{ o.status }}</span></td><td>{{ o.impression }}</td><td><button v-if="o.status === 'Ordered' && !done" class="sm danger" @click="cancelOrder('imaging', o.id)">Cancel</button></td></tr></tbody></table>
+        <div v-if="!done" class="grid g2" style="margin-top:8px"><div><label class="f">Search imaging study</label><SearchPick v-model="img.service_id" :items="radItems" placeholder="Search X-ray, CT, MRI, ultrasound… (e.g. chest, knee, abdomen)" /></div>
+          <div><label class="f">Modality</label><select v-model="img.modality_id"><option :value="null">—</option><option v-for="m in modalities" :key="m.id" :value="m.id">{{ m.name }}</option></select><label class="f" style="margin-top:8px">Priority</label><select v-model="img.priority"><option>Routine</option><option>Urgent</option><option>STAT</option></select><label class="f" style="margin-top:8px">Clinical information</label><input v-model="img.clinical_info" /></div></div>
         <button v-if="!done" :disabled="busy || !img.service_id" @click="orderImg">Order imaging</button>
       </div>
       <div class="card"><h2>Procedures</h2>
         <table v-if="d.procedures.length"><tbody><tr v-for="p in d.procedures" :key="p.id"><td>{{ p.name }}</td><td><span class="badge" :class="badgeClass(p.status)">{{ p.status }}</span></td><td><button v-if="p.status === 'Ordered' && !done" class="sm danger" @click="cancelOrder('procedure', p.id)">Cancel</button></td></tr></tbody></table>
-        <div v-if="!done" class="bar" style="margin-top:8px"><select v-model="proc.service_id" style="max-width:300px"><option :value="null">Select procedure…</option><option v-for="s in procSvc" :key="s.id" :value="s.id">{{ s.name }} ({{ money(s.price) }})</option></select><input v-model="proc.notes" placeholder="Notes" style="max-width:300px" /><button :disabled="busy || !proc.service_id" @click="orderProc">Order</button></div>
+        <div v-if="!done" class="grid g2" style="margin-top:8px"><div><label class="f">Search procedure</label><SearchPick v-model="proc.service_id" :items="procItems" placeholder="Search procedure (e.g. dressing, suturing, ECG)" /></div><div><label class="f">Notes</label><input v-model="proc.notes" /><button class="p" style="margin-top:10px" :disabled="busy || !proc.service_id" @click="orderProc">Order procedure</button></div></div>
       </div>
       <p class="muted small">Every order adds its charge to the visit bill automatically. Insurance visits request pre-authorisation where the service needs it.</p>
     </div>
 
     <div v-show="tab === 'rx'">
-      <div v-for="p in d.prescriptions" :key="p.id" class="card"><div class="bar" style="margin:0"><b>{{ p.rx_no }}</b><span class="badge" :class="badgeClass(p.status)">{{ p.status }}</span></div>
+      <div v-for="p in d.prescriptions" :key="p.id" class="card"><div class="bar" style="margin:0"><b>{{ p.rx_no }}</b><span class="badge" :class="badgeClass(p.status)">{{ p.status }}</span><div class="sp"></div><NuxtLink :to="`/print/rx/${p.id}`" class="btn sm">🖨 Print</NuxtLink></div>
         <table><thead><tr><th>Medicine</th><th>Dose</th><th>Frequency</th><th>Days</th><th class="num">Qty</th><th class="num">Dispensed</th></tr></thead><tbody><tr v-for="i in p.items" :key="i.id"><td>{{ i.drug }}</td><td>{{ i.dose }}</td><td>{{ i.frequency }}</td><td>{{ i.days }}</td><td class="num">{{ i.qty }}</td><td class="num">{{ i.dispensed }}</td></tr></tbody></table></div>
       <div v-if="!done" class="card"><h2>New prescription</h2>
         <div v-if="warnings.length" class="alert" :class="blocked ? 'err' : 'warn'"><b>{{ blocked ? 'Blocked – contraindicated combination' : 'Safety warnings' }}</b>
@@ -140,3 +145,7 @@ const tabs = [['notes', 'Consultation'], ['orders', 'Lab / Imaging / Procedures'
   </div>
   <div v-else class="empty">Loading…</div>
 </template>
+<style scoped>
+.sticky-hdr{position:sticky;top:0;z-index:5}
+.vt{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.vt-i{background:#f6f7f9;border-radius:8px;padding:6px 12px;display:flex;flex-direction:column;min-width:78px}.vt-i b{font-size:16px}.vt-i span{font-size:11px;color:#6b7280}
+</style>

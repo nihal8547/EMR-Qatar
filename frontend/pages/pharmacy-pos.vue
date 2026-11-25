@@ -18,7 +18,7 @@ async function sell() {
 <template>
   <div>
     <h1>OTC Point of Sale</h1>
-    <div v-if="last" class="alert ok">Receipt <b>{{ last.receipt_no }}</b> — total <b>{{ money(last.total) }} QAR</b>. <button class="sm" @click="last = null">OK</button></div>
+    <div v-if="last" class="alert ok">Receipt <b>{{ last.receipt_no }}</b> — total <b>{{ money(last.total) }} QAR</b>. <NuxtLink :to="`/print/doc/otc_sales/${last.id}`" class="btn sm">🖨 Print receipt</NuxtLink> <button class="sm" @click="last = null">OK</button></div>
     <div class="split" style="grid-template-columns:1fr 420px">
       <div class="card"><input v-model="q" placeholder="Search medicine by name or code…" autofocus />
         <table style="margin-top:8px"><tbody><tr v-for="d in results" :key="d.id" class="click" @click="add(d)"><td>{{ d.generic_name }} {{ d.strength }}<div class="small muted">{{ d.brand_name }} · {{ d.form }}</div></td><td><span v-if="d.requires_prescription" class="badge red">Rx only</span></td><td class="num">{{ money(d.price) }}</td><td class="num" :style="{ color: d.stock <= 0 ? 'var(--bad)' : '' }">{{ d.stock }} in stock</td></tr></tbody></table>

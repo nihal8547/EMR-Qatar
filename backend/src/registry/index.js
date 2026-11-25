@@ -57,6 +57,7 @@ const EXTRA_PERMISSIONS = [
   ['radiology.report', 'Radiology: write reports'],
   ['pharmacy.dispense', 'Pharmacy: dispense prescriptions'],
   ['pharmacy.pos', 'Pharmacy: OTC sales'],
+  ['pharmacy.dispense_credit', 'Pharmacy: dispense now and bill later (without taking payment)'],
   ['pharmacy.stock', 'Pharmacy: stock and expiry view'],
   ['billing.cashier', 'Cashier: invoices, payments, session'],
   ['billing.discount', 'Billing: give discount up to own limit'],
