@@ -131,12 +131,20 @@ function buildWhere(res, query) {
     }
   }
   const search = res.fields.filter((f) => f.search && !f.secret);
-  if (query.q && search.length) {
+  if (query.q && (search.length || patientSearchSQL(res, 't', '$0'))) {
     params.push(`%${String(query.q).trim()}%`);
     const p = `$${params.length}`;
-    where.push(`(${search.map((f) => `t.${q(f.name)}::text ILIKE ${p}`).join(' OR ')})`);
+    where.push(`(${[...search.map((f) => `t.${q(f.name)}::text ILIKE ${p}`), 'false'].join(' OR ')}${patientSearchSQL(res, 't', p)})`);
   }
   return { where: where.join(' AND '), params };
+}
+
+
+// Records that belong to a patient (have a patient_id -> patients ref) are also found by that patient's MRN, name, QID or phone.
+function patientSearchSQL(res, alias, p) {
+  const f = res.fields.find((x) => x.name === 'patient_id' && x.type === 'ref' && x.ref === 'patients');
+  if (!f || res.key === 'patients') return '';
+  return ` OR EXISTS (SELECT 1 FROM mpi.patients sp WHERE sp.id = ${alias}."patient_id" AND (sp.mrn ILIKE ${p} OR sp.full_name ILIKE ${p} OR sp.qid ILIKE ${p} OR sp.phone ILIKE ${p}))`;
 }
 
 async function list(res, query) {
@@ -233,9 +241,9 @@ router.get('/lookup/:key', wrap(async (req, res) => {
   }
   if (req.query.q) {
     const s = tr.fields.filter((f) => (f.search || tr.disp.includes(f.name)) && !f.secret && f.type !== 'ref');
-    if (s.length) {
+    if (s.length || patientSearchSQL(tr, 't', '$0')) {
       params.push(`%${String(req.query.q).trim()}%`);
-      where.push(`(${s.map((f) => `t.${q(f.name)}::text ILIKE $${params.length}`).join(' OR ')})`);
+      where.push(`(${[...s.map((f) => `t.${q(f.name)}::text ILIKE $${params.length}`), 'false'].join(' OR ')}${patientSearchSQL(tr, 't', `$${params.length}`)})`);
     }
   }
   const sql = `SELECT t."id", ${dispExpr(tr, 't')} AS label FROM ${fq(tr)} t WHERE ${where.join(' AND ')} ORDER BY label LIMIT 30`;

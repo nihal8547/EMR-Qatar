@@ -63,7 +63,7 @@ async function exportCsv() { try { await downloadCsv(`/r/${key.value}`, { ...que
     </div>
     <div class="card" style="padding:10px 12px">
       <div class="bar" style="margin:0">
-        <input v-model="state.q" placeholder="Search…" style="max-width:260px" />
+        <input v-model="state.q" :placeholder="m?.fields?.some((x: any) => x.name === 'patient_id') ? 'Search (MRN, patient name, phone…)' : 'Search…'" style="max-width:260px" />
         <template v-for="f in filterFields" :key="f.name">
           <select v-if="f.type === 'select'" v-model="state.filters[f.name]" style="max-width:170px"><option value="">{{ f.label }}: all</option><option v-for="o in f.options" :key="o" :value="o">{{ o }}</option></select>
           <select v-else-if="f.type === 'bool'" v-model="state.filters[f.name]" style="max-width:150px"><option value="">{{ f.label }}: all</option><option value="true">Yes</option><option value="false">No</option></select>
