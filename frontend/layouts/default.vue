@@ -16,7 +16,7 @@ const active = (to: string) => (to === '/' ? route.path === '/' : route.path ===
 const holdsActive = (g: any) => g.items.some((i: any) => active(i.to))
 const showItems = (g: any) => (q.value ? true : closed.value[g.key] === undefined ? holdsActive(g) : closed.value[g.key] === false)
 const initials = computed(() => (state.value.user?.full_name || '?').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase())
-const pageTitle = computed(() => { for (const g of state.value.menu) for (const i of g.items) if (active(i.to)) return i.label; return '' })
+const crumb = computed(() => { for (const g of state.value.menu) for (const i of g.items) if (active(i.to)) return { mod: g.key === 'dashboard' ? '' : g.label, page: i.label }; return { mod: 'Front Office', page: route.path.startsWith('/patient/') ? 'Patient 360' : '' } })
 watch(() => route.path, () => { open.value = false })
 </script>
 <template>
@@ -48,7 +48,7 @@ watch(() => route.path, () => { open.value = false })
     <div class="main">
       <header class="top">
         <button class="burger" @click="open = !open" aria-label="Menu"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
-        <div class="ptitle">{{ pageTitle }}</div>
+        <div class="crumb"><template v-if="crumb.mod"><span class="mod">{{ crumb.mod }}</span><span class="sep mod">›</span></template><b>{{ crumb.page }}</b></div>
         <div class="sp"></div>
         <span class="chip">{{ new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) }}</span>
       </header>

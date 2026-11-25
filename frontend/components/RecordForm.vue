@@ -4,6 +4,18 @@ const props = defineProps<{ fields: any[]; model: Record<string, any>; labels?: 
 const shown = computed(() => props.fields.filter((f) => !f.hidden && !(props.skip || []).includes(f.name) && !(f.type === 'password' && props.readonly)))
 const isOff = (f: any) => props.readonly || f.readonly || (f.auto && props.mode === 'create') || (f.auto && props.mode === 'edit')
 const wide = (f: any) => f.type === 'textarea' || f.type === 'json'
+const view = computed(() => !!props.readonly && props.mode === 'edit')
+function show(f: any) {
+  const v = props.model[f.name]
+  if (f.type === 'ref') return props.labels?.[f.name + '__label'] || (v ? String(v) : '')
+  if (v === null || v === undefined || v === '') return ''
+  if (f.type === 'bool') return v ? 'Yes' : 'No'
+  if (f.type === 'money') return money(v)
+  if (f.type === 'date') return fdate(v)
+  if (f.type === 'datetime') return fdt(v)
+  if (typeof v === 'object') return JSON.stringify(v)
+  return String(v)
+}
 
 // When a Visit is picked on a new record, fill the patient (and doctor) from it and show the patient's details.
 const { api } = useApi()
@@ -33,7 +45,11 @@ watch(() => props.model.visit_id, fillFromVisit, { immediate: true })
     <span v-if="info.patient"> · {{ info.patient.mrn }} · {{ info.patient.gender }}<template v-if="info.patient.dob">, {{ ageOf(info.patient.dob) }}</template><template v-if="info.patient.blood_group"> · {{ info.patient.blood_group }}</template><template v-if="info.patient.phone"> · {{ info.patient.phone }}</template></span>
     <div class="small muted">Visit {{ info.visit.visit_no }} · {{ info.visit.doctor_id__label }} · {{ info.visit.payer_type }} · {{ info.visit.status }}<template v-if="info.visit.complaint"> · {{ info.visit.complaint }}</template></div>
   </div>
-  <div class="fgrid">
+  <div v-if="view" class="dv">
+    <div v-for="f in shown" :key="f.name" class="i" :class="{ wide: wide(f) }"><div class="k">{{ f.label }}</div>
+      <div class="v" :class="{ none: !show(f), pre: wide(f) }"><template v-if="show(f)"><span v-if="f.type === 'select' && ['status', 'priority'].includes(f.name)" class="badge" :class="badgeClass(show(f))">{{ show(f) }}</span><template v-else>{{ show(f) }}</template></template><template v-else>—</template></div></div>
+  </div>
+  <div v-else class="fgrid">
     <div v-for="f in shown" :key="f.name" class="field" :class="{ wide: wide(f) }">
       <label class="f">{{ f.label }}<span v-if="f.required && !isOff(f)" class="req"> *</span><span v-if="f.auto && mode === 'create'" class="muted"> (auto)</span></label>
       <FieldInput :field="f" v-model="model[f.name]" :label="labels?.[f.name + '__label']" :disabled="isOff(f)" />

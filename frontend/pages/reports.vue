@@ -15,7 +15,7 @@ async function csv() { try { await downloadCsv(`/reports/${key.value}`, { from: 
   <div>
     <div class="bar"><h1>Reports</h1><div class="sp"></div><select v-model="key" style="width:320px"><option v-for="r in list" :key="r.key" :value="r.key">{{ r.title }}</option></select>
       <template v-if="cur?.dated"><input type="date" v-model="from" style="width:150px" /><span>–</span><input type="date" v-model="to" style="width:150px" /></template><button class="p" @click="run">Run</button><button @click="csv">⬇ CSV</button><button @click="printNow">🖨 Print</button></div>
-    <div class="card flush"><div v-if="loading" class="empty">Loading…</div>
+    <div class="card flush"><div v-if="loading" class="empty loading">Loading…</div>
       <div v-else-if="out" class="tbl-wrap"><h2 class="print-only" style="padding:8px">{{ out.title }} ({{ out.from }} to {{ out.to }})</h2>
         <table><thead><tr><th v-for="c in out.cols" :key="c.key" :class="{ num: c.type === 'money' || c.type === 'int' }">{{ c.label }}</th></tr></thead>
           <tbody><tr v-for="(r, i) in out.rows" :key="i"><td v-for="c in out.cols" :key="c.key" :class="{ num: c.type === 'money' || c.type === 'int' }">{{ cell(r, c) }}</td></tr>

@@ -85,7 +85,7 @@ async function exportCsv() { try { await downloadCsv(`/r/${key.value}`, { ...que
           </tbody>
         </table>
         <div v-if="!loading && !rows.length" class="empty">No records found.</div>
-        <div v-if="loading" class="empty">Loading…</div>
+        <div v-if="loading" class="empty loading">Loading…</div>
       </div>
     </div>
     <div class="bar"><span class="muted small">{{ total }} record(s)</span><div class="sp"></div>

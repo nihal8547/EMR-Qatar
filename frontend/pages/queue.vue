@@ -16,17 +16,17 @@ async function move(v: any, status: string) {
 </script>
 <template>
   <div>
-    <div class="bar"><h1>Queue Board</h1><div class="sp"></div><input type="date" v-model="date" style="width:160px" /><div style="width:220px"><LookupSelect v-model="doctor" resource="doctors" placeholder="All doctors" /></div><button @click="load">↻ Refresh</button></div>
-    <div class="muted small" style="margin-bottom:8px">Refreshes every 30 seconds. {{ rows.length }} visit(s).</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:10px;align-items:start">
-      <div v-for="c in cols" :key="c" class="card" style="padding:10px;background:#fafbfc">
+    <div class="bar"><div><h1>Queue Board</h1><div class="page-sub">Live patient flow · refreshes every 30 s · {{ rows.length }} visit(s)</div></div><div class="sp"></div><input type="date" v-model="date" style="width:160px" /><div style="width:220px"><LookupSelect v-model="doctor" resource="doctors" placeholder="All doctors" /></div><button @click="load">↻ Refresh</button></div>
+    <div class="qb">
+      <div v-for="c in cols" :key="c" class="qcol">
         <h3>{{ c }} <span class="badge grey">{{ by(c).length }}</span></h3>
-        <div v-for="v in by(c)" :key="v.id" class="card" style="padding:10px;margin-bottom:8px">
+        <div v-if="!by(c).length" class="qempty">No patients</div>
+        <div v-for="v in by(c)" :key="v.id" class="qcard">
           <div><b>#{{ v.token_no }}</b> {{ v.full_name }}</div>
           <div class="small muted">{{ v.mrn }} · {{ v.age }}y {{ v.gender?.[0] }} · {{ v.doctor_name }}</div>
           <div class="small"><span class="badge">{{ v.payer_type }}</span> <span v-if="v.payer_type === 'Insurance'" class="badge" :class="badgeClass(v.eligibility_status)">{{ v.eligibility_status }}</span> <span v-if="v.status !== 'Completed'" class="muted">⏱ {{ v.waiting_min }} min</span></div>
           <div v-if="v.complaint" class="small" style="margin-top:4px">{{ v.complaint }}</div>
-          <div class="pill-row" style="margin-top:6px">
+          <div class="qacts">
             <NuxtLink v-if="can('vitals.create') && ['Registered', 'Triage'].includes(v.status)" :to="`/r/vitals/new?visit_id=${v.id}`" class="btn sm">Vitals</NuxtLink>
             <NuxtLink v-if="can('consult.use')" :to="`/consult/${v.id}`" class="btn sm">Consult</NuxtLink>
             <NuxtLink v-if="can('billing.cashier')" :to="`/cashier?visit=${v.id}`" class="btn sm">Bill</NuxtLink>

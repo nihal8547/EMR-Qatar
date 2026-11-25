@@ -28,5 +28,5 @@ const tabs = [['home', 'Home'], ['appts', 'Appointments'], ['book', 'Book'], ['l
     <div v-if="tab === 'rx'" class="card"><h2>Prescriptions</h2><div v-for="r in d.prescriptions" :key="r.rx_no" style="margin-bottom:10px"><b>{{ r.rx_no }}</b> · {{ fdate(r.date) }} <span class="badge" :class="badgeClass(r.status)">{{ r.status }}</span><div v-for="(i, k) in r.items" :key="k" class="small">• {{ i.drug }} – {{ i.dose }} {{ i.frequency }} {{ i.days ? 'for ' + i.days + ' days' : '' }}</div></div><div v-if="!d.prescriptions.length" class="muted">None.</div></div>
     <div v-if="tab === 'bills'" class="card"><h2>Bills</h2><table><thead><tr><th>Invoice</th><th>Date</th><th class="num">Your share</th><th class="num">Paid</th><th class="num">Balance</th><th>Status</th></tr></thead><tbody><tr v-for="i in d.invoices" :key="i.id"><td>{{ i.invoice_no }}</td><td>{{ fdate(i.invoice_date) }}</td><td class="num">{{ money(i.patient_share) }}</td><td class="num">{{ money(i.paid) }}</td><td class="num">{{ money(i.balance) }}</td><td><span class="badge" :class="badgeClass(i.status)">{{ i.status }}</span></td></tr></tbody></table><div class="muted small" style="margin-top:8px">Pay at the reception desk. Online payment is not enabled in this build.</div></div>
   </div>
-  <div v-else class="empty">Loading…</div>
+  <div v-else class="empty loading">Loading…</div>
 </template>

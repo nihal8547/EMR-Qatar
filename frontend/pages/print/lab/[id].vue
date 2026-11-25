@@ -17,5 +17,5 @@ const fc = (f: string) => (f?.startsWith('Critical') ? 'flag-C' : f === 'High' |
       <p class="small muted" style="margin-top:14px">Validated by {{ d.items[0]?.validated_by || '—' }} {{ d.items[0] ? fdt(d.items[0].validated_at) : '' }}. Interpret results together with clinical findings.</p>
     </div>
   </div>
-  <div v-else class="empty">Loading…</div>
+  <div v-else class="empty loading">Loading…</div>
 </template>

@@ -19,5 +19,5 @@ const printNow = () => window.print()
       <p class="small muted" style="margin-top:16px">{{ d.centre.tax_note }}</p>
     </div>
   </div>
-  <div v-else class="empty">Loading…</div>
+  <div v-else class="empty loading">Loading…</div>
 </template>

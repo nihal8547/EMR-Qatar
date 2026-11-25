@@ -26,5 +26,5 @@ const groups = computed(() => { const g: Record<string, any[]> = {}; for (const 
           <Barcode39 :value="sp.barcode" :height="36" /><div class="small">{{ sp.barcode }} · <b>{{ sp.sample_type }}</b></div></div></div>
     </div>
   </div>
-  <div v-else class="empty">Loading…</div>
+  <div v-else class="empty loading">Loading…</div>
 </template>

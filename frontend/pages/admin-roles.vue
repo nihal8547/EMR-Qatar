@@ -32,5 +32,5 @@ const role = computed(() => data.value?.roles.find((r: any) => r.id === roleId.v
         <td class="nowrap"><button class="sm" @click="rowAll(g, true)">all</button> <button class="sm" @click="rowAll(g, false)">none</button></td></tr></tbody></table></div></div>
     <p class="muted small">Pages and sidebar items appear only when the role has the matching permission. The server enforces the same rules on every request.</p>
   </div>
-  <div v-else class="empty">Loading…</div>
+  <div v-else class="empty loading">Loading…</div>
 </template>

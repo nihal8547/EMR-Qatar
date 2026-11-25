@@ -143,7 +143,7 @@ const tabs = computed(() => [['notes', 'Consultation', d.value?.diagnoses?.lengt
       <div class="card"><h2>Charges so far</h2><table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody><tr v-for="(c, i) in d.charges" :key="i"><td>{{ c.description }}</td><td class="num">{{ c.qty }}</td><td class="num">{{ money(c.amount) }}</td><td>{{ c.status }}</td></tr></tbody></table></div>
     </div>
   </div>
-  <div v-else class="empty">Loading…</div>
+  <div v-else class="empty loading">Loading…</div>
 </template>
 <style scoped>
 .sticky-hdr{position:sticky;top:0;z-index:5}

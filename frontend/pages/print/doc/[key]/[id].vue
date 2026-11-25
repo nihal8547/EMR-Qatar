@@ -36,5 +36,5 @@ const title = computed(() => (d.value?.meta.singular || '').toUpperCase())
       <div style="margin-top:36px" class="small"><div style="border-top:1px solid #000;width:240px;padding-top:4px">{{ letter && d.record.issued_by__label ? d.record.issued_by__label : 'Authorised signature' }}<div class="muted">Printed by {{ auth.user?.full_name }}</div></div></div>
     </div>
   </div>
-  <div v-else class="empty">Loading…</div>
+  <div v-else class="empty loading">Loading…</div>
 </template>

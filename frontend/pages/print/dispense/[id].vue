@@ -30,5 +30,5 @@ const dir = (i: any) => [i.dose, i.frequency, i.duration_days ? `for ${i.duratio
         <div class="small muted">{{ fdate(d.dispense.dispensed_at) }} · Dr. {{ d.dispense.doctor }}</div></div>
     </div>
   </div>
-  <div v-else class="empty">Loading…</div>
+  <div v-else class="empty loading">Loading…</div>
 </template>

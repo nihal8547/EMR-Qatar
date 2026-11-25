@@ -21,5 +21,5 @@ const age = (dob: string) => { if (!dob) return ''; const a = Math.floor((Date.n
       <div style="margin-top:36px" class="small"><div style="border-top:1px solid #000;width:240px;padding-top:4px">{{ d.rx.doctor }}<div class="muted">Licence {{ d.rx.doctor_licence || '–' }}</div></div></div>
     </div>
   </div>
-  <div v-else class="empty">Loading…</div>
+  <div v-else class="empty loading">Loading…</div>
 </template>
