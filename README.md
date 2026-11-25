@@ -3,6 +3,9 @@
 Nuxt 3 (frontend) · Node.js/Express (API) · PostgreSQL with one schema per domain.
 One registry file set (`backend/src/registry/`) drives the tables, the REST API, permissions, sidebar and the generic list/form pages.
 
+## Sample data
+`npm run db:reset` loads masters, roles and a few demo patients (this is the state the automated tests expect). `npm run db:reset:demo` (or `npm run db:demo` on top of it) also loads a full working set: about 14 patients with visits, vitals, lab results, imaging reports, prescriptions, dispensing (including a controlled drug with witness), invoices, payments, a submitted claim, dental charts, and at least 3 rows on every page. It is created through the real API, so every record follows the business rules. Docker first start loads it automatically; set `DEMO_DATA=false` to skip.
+
 ## Dental module
 Sidebar **Dental**: a visual chart (FDI numbering, permanent and primary teeth, five surfaces per tooth, 16 conditions), treatment plans with priced procedures, and completion that posts the charge to the patient's open visit and updates the chart. Demo dentist: `drdental`. Patients not yet treated by the dentist need a break-glass reason (audited), like Patient 360.
 

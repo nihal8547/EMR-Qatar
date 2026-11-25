@@ -23,6 +23,7 @@ services:
     environment:
       DATABASE_URL: postgres://hms:${DB_PASSWORD:-hms_pass}@db:5432/qatar_hms
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (copy .env.example)}
+      DEMO_DATA: ${DEMO_DATA:-true}
     ports:
       - "${APP_PORT:-4000}:4000"
 

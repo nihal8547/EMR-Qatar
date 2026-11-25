@@ -20,5 +20,6 @@ const run = (f) => execFileSync(process.execPath, [path.join(__dirname, f)], { s
     console.log('First start: creating tables and demo data...');
     run('migrate.js');
     run('seed.js');
+    if (process.env.DEMO_DATA !== 'false') run('seed_demo.js');
   } else console.log('Database already initialised.');
 })().catch((e) => { console.error(e); process.exit(1); });
