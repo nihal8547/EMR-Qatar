@@ -279,6 +279,32 @@ router.get('/r/:key/:id', wrap(async (req, res) => {
   res.json(row);
 }));
 
+/** Generic printable document for any record: its fields, child rows, the patient block and the centre header. */
+router.get('/print/:key/:id', wrap(async (req, res) => {
+  const r = getRes(req.params.key);
+  if (!can(req, `${r.key}.view`)) throw forbidden();
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1 || id > 2147483647) throw notFound();
+  const row = await fetchOne(db, r, id);
+  if (!row) throw notFound();
+  const vis = (res_) => res_.fields.filter((f) => !f.hidden && !f.secret && f.type !== 'password' && !['created_by', 'updated_by'].includes(f.name));
+  const fields = vis(r).map((f) => ({ name: f.name, label: f.label, type: f.type }));
+  const children = [];
+  for (const c of r.children || []) {
+    const cr = reg.resources[c.res];
+    if (!cr || !can(req, `${cr.key}.view`)) continue;
+    const out = await list(cr, { [c.fk]: String(id), limit: '200' });
+    children.push({ key: cr.key, label: c.label || cr.label, fields: vis(cr).filter((f) => f.list && f.name !== c.fk).map((f) => ({ name: f.name, label: f.label, type: f.type })), rows: out.rows });
+  }
+  let patient = null;
+  if (row.patient_id && r.key !== 'patients' && can(req, 'patients.view')) {
+    patient = (await db.query(`SELECT mrn, full_name, dob, gender, qid, phone, blood_group FROM "mpi"."patients" WHERE id=$1`, [row.patient_id])).rows[0] || null;
+  }
+  const s = (await db.query(`SELECT key, value FROM "admin"."settings" WHERE key IN ('centre_name','centre_address','centre_phone') AND is_deleted=false`)).rows;
+  await audit(null, req.user, 'PRINT', r.key, id, null, req.ip);
+  res.json({ meta: { key: r.key, label: r.label, singular: r.singular || r.label }, fields, record: row, children, patient, centre: Object.fromEntries(s.map((x) => [x.key, x.value])) });
+}));
+
 /** Insurance policies entered together with a new patient: same rules and audit as adding them one by one. */
 async function addPolicies(client, req, patientId, list) {
   const items = Array.isArray(list) ? list : [list];
