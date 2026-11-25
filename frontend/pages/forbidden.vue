@@ -1,0 +1,1 @@
+<template><div class="card"><h1>No access</h1><p class="muted">Your role does not have permission to open this page. Ask an administrator if you need it.</p><NuxtLink to="/">Back to dashboard</NuxtLink></div></template>
