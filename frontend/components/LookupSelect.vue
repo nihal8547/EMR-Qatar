@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Searchable dropdown backed by GET /lookup/:resource?q=
-const props = defineProps<{ modelValue: any; resource: string; initialLabel?: string; disabled?: boolean; placeholder?: string }>()
+const props = defineProps<{ modelValue: any; resource: string; initialLabel?: string; disabled?: boolean; placeholder?: string; filter?: Record<string, any> }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: any): void; (e: 'picked', v: { id: number; label: string } | null): void }>()
 const { api } = useApi()
 const text = ref(props.initialLabel || '')
@@ -18,7 +18,8 @@ watch(() => props.modelValue, (v) => { if (!v) text.value = ''; else if (!text.v
 watch(() => props.initialLabel, (v) => { if (v && !text.value) text.value = v })
 
 async function search() {
-  try { items.value = await api(`/lookup/${props.resource}`, { query: { q: text.value } }) } catch { items.value = [] }
+  try { const f: Record<string, any> = {}; for (const [k, v] of Object.entries(props.filter || {})) if (v !== null && v !== undefined && v !== '') f['f_' + k] = v
+    items.value = await api(`/lookup/${props.resource}`, { query: { q: text.value, ...f } }) } catch { items.value = [] }
 }
 function onInput() {
   open.value = true

@@ -7,6 +7,8 @@ const d = ref<any>(null); const sess = ref<any>(null); const busy = ref(false)
 const disc = ref<number | null>(null); const pay = reactive({ amount: null as number | null, method: 'Cash', reference: '' })
 const openCash = ref<number | null>(0); const closeCash = ref<number | null>(null)
 
+const discTouched = ref(false)
+async function decideCheckin(approve: boolean) { try { await api(`/visits/${sel.value}/discount/decision`, { method: 'POST', body: { approve } }); ok(approve ? 'Discount approved' : 'Discount rejected'); await loadVisit() } catch (e) { err(e) } }
 async function loadList() { try { list.value = await api('/billing/worklist', { query: { q: q.value } }) } catch (e) { err(e) } }
 async function loadSess() { try { sess.value = await api('/billing/session/current') } catch (e) { err(e) } }
 async function loadVisit() {
@@ -14,7 +16,9 @@ async function loadVisit() {
   try {
     d.value = await api(`/billing/visit/${sel.value}`)
     const inv = d.value.invoice?.invoice
-    disc.value = inv && Number(inv.gross) > 0 ? Math.round((Number(inv.discount) / Number(inv.gross)) * 10000) / 100 : 0
+    const ci = d.value.checkin_discount
+    disc.value = inv && Number(inv.gross) > 0 ? Math.round((Number(inv.discount) / Number(inv.gross)) * 10000) / 100 : (ci && ci.status === 'Applied' ? ci.pct_now : 0)
+    discTouched.value = false
     pay.amount = inv ? Number(inv.balance) : null
   } catch (e) { err(e); d.value = null }
 }
@@ -25,7 +29,7 @@ const inv = computed(() => d.value?.invoice?.invoice)
 const pendTotal = computed(() => (d.value?.pending || []).reduce((s: number, c: any) => s + Number(c.amount), 0))
 
 async function run(fn: () => Promise<any>, msg: string) { busy.value = true; try { const r = await fn(); ok(msg); return r } catch (e) { err(e) } finally { busy.value = false } }
-async function makeInvoice() { if (await run(() => api(`/billing/visit/${sel.value}/invoice`, { method: 'POST', body: { discount_pct: disc.value || 0 } }), 'Invoice saved')) { await loadVisit(); loadList() } }
+async function makeInvoice() { if (await run(() => api(`/billing/visit/${sel.value}/invoice`, { method: 'POST', body: discTouched.value ? { discount_pct: disc.value || 0 } : {} }), 'Invoice saved')) { await loadVisit(); loadList() } }
 async function takePayment() {
   const r = await run(() => api(`/billing/invoices/${inv.value.id}/pay`, { method: 'POST', body: { amount: pay.amount, method: pay.method, reference: pay.reference } }), 'Payment recorded')
   if (r) { pay.reference = ''; await Promise.all([loadVisit(), loadList(), loadSess()]) }
@@ -55,10 +59,17 @@ async function closeSession() {
         <div v-if="d.pending.length" class="card"><h2>Unbilled charges</h2>
           <table><thead><tr><th>Item</th><th>Source</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th></tr></thead><tbody><tr v-for="c in d.pending" :key="c.id"><td>{{ c.description }} <span v-if="!c.covered && d.visit.payer_type === 'Insurance'" class="badge amber">not covered</span></td><td>{{ c.source }}</td><td class="num">{{ c.qty }}</td><td class="num">{{ money(c.unit_price) }}</td><td class="num">{{ money(c.amount) }}</td></tr>
             <tr><td colspan="4" class="right"><b>Total</b></td><td class="num"><b>{{ money(pendTotal) }}</b></td></tr></tbody></table></div>
+        <div v-if="d.checkin_discount" class="alert" :class="d.checkin_discount.status === 'Applied' ? 'ok' : 'warn'">
+          Check-in discount: <b>{{ d.checkin_discount.type === 'percent' ? d.checkin_discount.value + '%' : 'QAR ' + d.checkin_discount.value }}</b> — {{ d.checkin_discount.reason }}
+          <span class="badge" :class="d.checkin_discount.status === 'Applied' ? 'green' : d.checkin_discount.status === 'Rejected' ? 'red' : 'amber'">{{ d.checkin_discount.status }}</span>
+          <span v-if="d.checkin_discount.status === 'Applied' && !inv" class="muted small"> · applied automatically when the invoice is created</span>
+          <span v-if="d.checkin_discount.status === 'Pending approval' && can('billing.approve_discount')"> <button class="sm ok" @click="decideCheckin(true)">Approve</button> <button class="sm danger" @click="decideCheckin(false)">Reject</button></span>
+          <span v-else-if="d.checkin_discount.status === 'Pending approval'" class="small"> · invoice stays at full price until a manager approves.</span>
+        </div>
         <div class="card">
           <div class="bar"><h2 style="margin:0">Invoice <span v-if="inv">{{ inv.invoice_no }}</span></h2><div class="sp"></div><span v-if="inv" class="badge" :class="badgeClass(inv.status)">{{ inv.status }}</span>
             <NuxtLink v-if="inv" :to="`/print/invoice/${inv.id}`" class="btn sm">🖨 Print</NuxtLink></div>
-          <div class="bar"><label class="small muted">Discount %</label><input type="number" min="0" max="100" step="any" v-model.number="disc" style="width:90px" :disabled="!can('billing.discount') && !can('billing.approve_discount')" /><span v-if="!can('billing.discount') && !can('billing.approve_discount')" class="small muted">no discount rights</span>
+          <div class="bar"><label class="small muted">Discount %</label><input type="number" min="0" max="100" step="any" v-model.number="disc" style="width:90px" @input="discTouched = true" :disabled="!can('billing.discount') && !can('billing.approve_discount')" /><span v-if="!can('billing.discount') && !can('billing.approve_discount')" class="small muted">no discount rights</span>
             <button class="p" :disabled="busy || (!d.pending.length && !inv)" @click="makeInvoice">{{ inv ? 'Add new charges / refresh invoice' : 'Create invoice' }}</button>
             <button v-if="inv && can('billing.approve_discount') && Number(inv.paid) === 0 && inv.status !== 'Cancelled'" class="danger" @click="cancelInvoice">Cancel invoice</button></div>
           <template v-if="inv">

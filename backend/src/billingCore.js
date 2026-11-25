@@ -82,6 +82,10 @@ async function createOrRefreshInvoice(client, user, visitId, opts = {}) {
   let pct = opts.discount_pct;
   if (pct === undefined || pct === null || pct === '') {
     pct = existing && Number(existing.gross) > 0 ? (Number(existing.discount) / Number(existing.gross)) * 100 : 0;
+    if (!existing && visit.discount_status === 'Applied') {          // discount given at check-in
+      const g = charges.reduce((s, c) => s + Number(c.amount), 0);
+      pct = visit.discount_type === 'amount' ? (g > 0 ? Math.min(100, (Number(visit.discount_value) / g) * 100) : 0) : Number(visit.discount_value);
+    }
   } else {
     pct = Number(pct);
     if (!(pct >= 0 && pct <= 100)) throw bad('Discount % must be between 0 and 100');

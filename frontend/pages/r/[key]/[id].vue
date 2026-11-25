@@ -10,6 +10,7 @@ const labels = ref<Record<string, string>>({})
 const busy = ref(false)
 const loaded = ref(false)
 const editing = ref(false)
+const policies = ref<any[]>([])
 
 function defaults(fields: any[]) {
   const o: Record<string, any> = {}
@@ -63,6 +64,15 @@ async function save() {
       body[f.name] = model.value[f.name]
     }
     if (isNew.value) {
+      if (key.value === 'patients' && policies.value.length) {
+        for (const [i, p] of policies.value.entries()) {
+          if (!p.payer_id) throw new Error(`Policy ${i + 1}: choose the insurance company`)
+          if (!String(p.policy_no).trim() || !String(p.member_id).trim()) throw new Error(`Policy ${i + 1}: policy number and member ID are required`)
+          if (!p.valid_to) throw new Error(`Policy ${i + 1}: enter the "valid to" date`)
+          if (p.valid_from && p.valid_to < p.valid_from) throw new Error(`Policy ${i + 1}: "valid to" is before "valid from"`)
+        }
+        body.insurance = policies.value
+      }
       const r = await api(`/r/${key.value}`, { method: 'POST', body })
       ok('Created'); await navigateTo(`/r/${key.value}/${r.id}`, { replace: true })
     } else {
@@ -106,6 +116,7 @@ const statusField = computed(() => fields.value.find((f) => f.name === 'status')
       <div v-if="m.help" class="muted small" style="margin-bottom:10px">{{ m.help }}</div>
       <div v-if="isNew && !m.can.create" class="alert err">Your role cannot create this kind of record.</div>
       <RecordForm :fields="fields" :model="model" :labels="labels" :mode="isNew ? 'create' : 'edit'" :readonly="!editing" />
+      <InsuranceBlock v-if="isNew && key === 'patients' && can('policy_members.create')" v-model="policies" />
       <div v-if="editing" class="bar" style="margin-top:8px"><button class="p" :disabled="busy || (isNew && !m.can.create)" @click="save">{{ busy ? 'Saving…' : 'Save' }}</button><button @click="isNew ? navigateTo(`/r/${key}`) : load()">Cancel</button></div>
     </div>
     <template v-if="!isNew">

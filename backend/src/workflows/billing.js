@@ -56,7 +56,14 @@ router.get('/billing/visit/:visitId', need('billing.cashier'), wrap(async (req, 
   const pre = (await db.query(
     `SELECT pa.auth_no, pa.status, s.name FROM "insurance"."pre_auths" pa JOIN "billing"."services" s ON s.id=pa.service_id WHERE pa.visit_id=$1 AND pa.is_deleted=false`, [vid])).rows;
   const session = (await db.query(`SELECT * FROM "billing"."cashier_sessions" WHERE user_id=$1 AND status='Open' AND is_deleted=false LIMIT 1`, [req.user.id])).rows[0];
+  let checkin = null;
+  if (visit.discount_status) {
+    const g = pending.reduce((a, c) => a + Number(c.amount), 0);
+    checkin = { type: visit.discount_type, value: Number(visit.discount_value), reason: visit.discount_reason, status: visit.discount_status,
+      pct_now: visit.discount_type === 'amount' ? (g > 0 ? round2(Math.min(100, (Number(visit.discount_value) / g) * 100)) : 0) : Number(visit.discount_value) };
+  }
   res.json({
+    checkin_discount: checkin,
     visit: { id: visit.id, visit_no: visit.visit_no, status: visit.status, payer_type: visit.payer_type, eligibility_status: visit.eligibility_status },
     patient, pending, invoice: inv ? await invoiceBundle(inv.id) : null, deposit_balance: round2(dep.bal), preauths: pre, session: session || null,
   });

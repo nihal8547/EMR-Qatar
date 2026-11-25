@@ -223,6 +223,14 @@ router.get('/lookup/:key', wrap(async (req, res) => {
   const params = [];
   if (base.isAlias) where.push(base.alias.where.replace(/"role_id"/g, 't."role_id"'));
   if (req.query.id) { params.push(Number(req.query.id)); where.push(`t."id" = $${params.length}`); }
+  // equality filters on the target's own fields, e.g. /lookup/plans?f_payer_id=3 (field names come from the registry only)
+  for (const [k, v] of Object.entries(req.query)) {
+    if (!k.startsWith('f_')) continue;
+    const f = tr.fields.find((x) => x.name === k.slice(2) && ['ref', 'select', 'bool'].includes(x.type) && !x.secret);
+    if (!f || v === '' || v === undefined) continue;
+    params.push(f.type === 'ref' ? Number(v) : f.type === 'bool' ? v === 'true' : String(v));
+    where.push(`t.${q(f.name)} = $${params.length}`);
+  }
   if (req.query.q) {
     const s = tr.fields.filter((f) => (f.search || tr.disp.includes(f.name)) && !f.secret && f.type !== 'ref');
     if (s.length) {
@@ -263,6 +271,25 @@ router.get('/r/:key/:id', wrap(async (req, res) => {
   res.json(row);
 }));
 
+/** Insurance policies entered together with a new patient: same rules and audit as adding them one by one. */
+async function addPolicies(client, req, patientId, list) {
+  const items = Array.isArray(list) ? list : [list];
+  if (items.length > 5) throw bad('At most 5 policies can be added at registration');
+  const pr = getRes('policy_members');
+  if (items.length && !can(req, 'policy_members.create')) throw forbidden('Your role cannot add insurance policies');
+  for (const raw of items) {
+    const data = prepare(pr, { ...raw, patient_id: patientId, status: 'Active' }, 'create');
+    if (data.valid_from && data.valid_to && String(data.valid_to) < String(data.valid_from)) throw bad('Policy "valid to" date is before "valid from"');
+    if (data.plan_id) {
+      const pl = (await client.query(`SELECT payer_id FROM "insurance"."plans" WHERE id=$1 AND is_deleted=false`, [data.plan_id])).rows[0];
+      if (!pl) throw bad('Plan not found');
+      if (String(pl.payer_id) !== String(data.payer_id)) throw bad('The chosen plan belongs to a different insurance company');
+    }
+    let pid; try { pid = await insertRow(client, pr, data, req.user); } catch (e) { throw errorFromPg(e); }
+    await audit(client, req.user, 'CREATE', 'policy_members', pid, { ...data, via: 'patient registration' }, req.ip);
+  }
+}
+
 router.post('/r/:key', wrap(async (req, res) => {
   const r = getRes(req.params.key);
   if (!can(req, `${r.key}.create`)) throw forbidden();
@@ -282,6 +309,7 @@ router.post('/r/:key', wrap(async (req, res) => {
     await hooks.run(r.hooks.after, { ...ctx, row, action: 'create' });
     const safe = { ...data }; delete safe.password; delete safe.password_hash;
     await audit(client, req.user, 'CREATE', r.key, newId, safe, req.ip);
+    if (r.key === 'patients' && req.body.insurance !== undefined && req.body.insurance !== null) await addPolicies(client, req, newId, req.body.insurance);
     return newId;
   });
   res.status(201).json(await fetchOne(db, r, id));

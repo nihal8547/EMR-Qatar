@@ -112,6 +112,11 @@ module.exports = (R) => {
     'complaint:text',
     'appointment_id:ref=appointments:Appointment',
     'closed_at:datetime:Closed at:ro',
+    'discount_type:select=percent/amount:Check-in discount type:ro',
+    'discount_value:decimal:Check-in discount value:ro',
+    'discount_reason:text:Discount reason:ro',
+    'discount_status:select=Applied/Pending approval/Rejected:Discount status:ro,list,filter',
+    'discount_by:ref=users:Discount given by:ro',
   ], {
     schema: 'scheduling',
     noCreate: true,

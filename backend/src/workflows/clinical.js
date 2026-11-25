@@ -5,6 +5,8 @@ const db = require('../db');
 const crud = require('../crud');
 const { allergyMatches, wrap, bad, forbidden, notFound, conflict, need, can, audit, today, getVisit, addCharge, cancelCharges } = require('../lib');
 
+const vp = require('../visitPricing');
+
 const router = express.Router();
 const VISIT_STATUSES = ['Registered', 'Triage', 'With Doctor', 'Diagnostics', 'Pharmacy', 'Billing', 'Completed', 'Cancelled'];
 
@@ -59,15 +61,28 @@ router.post('/visits/start', need('visits.start'), wrap(async (req, res) => {
       if (!c) throw bad('Select an active corporate account');
     }
 
+    // check-in discount: authorised now if within the user's limit, otherwise waits for a manager
+    const discount = vp.parseDiscount(b.discount);
+    let discStatus = null;
+    if (discount) {
+      if (discount.reason.length < 3) throw bad('Give a reason for the discount');
+      const corp = payer_type === 'Corporate' ? (await client.query(`SELECT id FROM "insurance"."corporate_accounts" WHERE id=$1`, [b.corporate_id])).rows[0] : null;
+      const est = await vp.estimate(client, req.user, { doctor, visit_type, payer_type, policy, corporate: corp, discount });
+      if (!est.service) throw bad('No consultation service is configured, so a discount cannot be calculated');
+      discStatus = est.discount.authority.mode === 'direct' ? 'Applied' : 'Pending approval';
+      if (discStatus === 'Pending approval') warnings.push(`Discount of ${discount.type === 'percent' ? discount.value + '%' : 'QAR ' + discount.value} is above your limit and waits for manager approval. Until then the bill is at full price.`);
+    }
+
     const tok = (await client.query(
       `SELECT COALESCE(MAX(token_no),0)+1 AS t FROM "scheduling"."visits" WHERE doctor_id=$1 AND visit_date=CURRENT_DATE AND is_deleted=false`, [doctor.id])).rows[0].t;
     const visit_no = await db.nextCode(client, 'VIS', 6);
     const vid = (await client.query(
       `INSERT INTO "scheduling"."visits"("visit_no","patient_id","doctor_id","department_id","visit_date","visit_type","status","payer_type","policy_id","corporate_id",
-         "eligibility_status","token_no","complaint","appointment_id","created_by","updated_by")
-       VALUES ($1,$2,$3,$4,CURRENT_DATE,$5,'Registered',$6,$7,$8,$9,$10,$11,$12,$13,$13) RETURNING id`,
+         "eligibility_status","token_no","complaint","appointment_id","discount_type","discount_value","discount_reason","discount_status","discount_by","created_by","updated_by")
+       VALUES ($1,$2,$3,$4,CURRENT_DATE,$5,'Registered',$6,$7,$8,$9,$10,$11,$12,$14,$15,$16,$17,$18,$13,$13) RETURNING id`,
       [visit_no, patient.id, doctor.id, department_id, visit_type, payer_type, payer_type === 'Insurance' ? policy.id : null,
-        payer_type === 'Corporate' ? b.corporate_id : null, eligibility, tok, b.complaint || null, b.appointment_id || null, req.user.id])).rows[0].id;
+        payer_type === 'Corporate' ? b.corporate_id : null, eligibility, tok, b.complaint || null, b.appointment_id || null, req.user.id,
+        discount ? discount.type : null, discount ? discount.value : null, discount ? discount.reason : null, discStatus, discount ? req.user.id : null])).rows[0].id;
 
     if (payer_type === 'Insurance') {
       await client.query(
@@ -80,23 +95,53 @@ router.post('/visits/start', need('visits.start'), wrap(async (req, res) => {
     }
 
     // consultation fee
-    const code = visit_type === 'Follow-up' ? 'CONS-FU' : null;
-    let svc = null;
-    if (code) svc = (await client.query(`SELECT id FROM "billing"."services" WHERE code=$1 AND active AND is_deleted=false`, [code])).rows[0];
-    if (!svc) {
-      svc = (await client.query(
-        `SELECT id FROM "billing"."services" WHERE category='Consultation' AND active AND is_deleted=false AND code <> 'CONS-FU'
-          ORDER BY (department_id IS NOT DISTINCT FROM $1::bigint) DESC, id LIMIT 1`, [department_id])).rows[0];
-    }
+    const svc = await vp.pickConsultService(client, visit_type, department_id);
     if (svc) {
       const visit = await getVisit(client, vid);
       await addCharge(client, { visit, service_id: svc.id, source: 'Consultation', source_id: vid, user: req.user });
     } else warnings.push('No consultation service found in the price list; no consultation charge was added.');
 
-    await audit(client, req.user, 'VISIT_START', 'visits', vid, { visit_no, payer_type }, req.ip);
-    return { id: vid, visit_no, token_no: tok, eligibility, warnings };
+    await audit(client, req.user, 'VISIT_START', 'visits', vid, { visit_no, payer_type, discount: discount ? { ...discount, status: discStatus } : undefined }, req.ip);
+    return { id: vid, visit_no, token_no: tok, eligibility, warnings, discount_status: discStatus };
   });
   res.status(201).json(out);
+}));
+
+
+/* ---------------------------------------------------------------- Check-in price preview + discount approval */
+router.get('/visits/price-preview', need('visits.start'), wrap(async (req, res) => {
+  const q = req.query;
+  const payer_type = ['Cash', 'Insurance', 'Corporate'].includes(q.payer_type) ? q.payer_type : 'Cash';
+  const doctor = q.doctor_id ? (await db.query(`SELECT id, department_id FROM "auth"."users" WHERE id=$1 AND NOT is_deleted`, [Number(q.doctor_id) || 0])).rows[0] : null;
+  const policy = payer_type === 'Insurance' && q.policy_id ? (await db.query(`SELECT * FROM "insurance"."policy_members" WHERE id=$1 AND is_deleted=false`, [Number(q.policy_id) || 0])).rows[0] : null;
+  const corporate = payer_type === 'Corporate' && q.corporate_id ? (await db.query(`SELECT id, name, discount_pct FROM "insurance"."corporate_accounts" WHERE id=$1 AND is_deleted=false`, [Number(q.corporate_id) || 0])).rows[0] : null;
+  const discount = vp.parseDiscount({ type: q.discount_type, value: q.discount_value });
+  const est = await vp.estimate(db, req.user, { doctor, visit_type: ['OPD', 'Emergency', 'Follow-up', 'Tele'].includes(q.visit_type) ? q.visit_type : 'OPD', payer_type, policy, corporate, discount });
+  if (payer_type === 'Insurance' && !policy) est.warnings = [...(est.warnings || []), 'Select the insurance policy to see the insurer / patient split.'];
+  res.json({ ...est, my_limit: req.user.discount_limit, can_discount: req.user.perms.has('billing.discount') || req.user.perms.has('billing.approve_discount') });
+}));
+
+router.get('/visits/discounts/pending', need('billing.approve_discount'), wrap(async (req, res) => {
+  const { rows } = await db.query(
+    `SELECT v.id, v.visit_no, v.discount_type, v.discount_value, v.discount_reason, v.created_at, p.mrn, p.full_name, u.full_name AS requested_by
+       FROM "scheduling"."visits" v JOIN "mpi"."patients" p ON p.id=v.patient_id LEFT JOIN "auth"."users" u ON u.id=v.discount_by
+      WHERE v.discount_status='Pending approval' AND v.is_deleted=false AND v.status <> 'Cancelled' ORDER BY v.id DESC LIMIT 50`);
+  res.json(rows);
+}));
+
+router.post('/visits/:id/discount/decision', need('billing.approve_discount'), wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) throw notFound('Visit not found');
+  const approve = req.body.approve === true;
+  await db.tx(async (client) => {
+    const v = (await client.query(`SELECT id, discount_status FROM "scheduling"."visits" WHERE id=$1 AND is_deleted=false FOR UPDATE`, [id])).rows[0];
+    if (!v) throw notFound('Visit not found');
+    if (v.discount_status !== 'Pending approval') throw conflict('This discount is not waiting for approval');
+    const inv = (await client.query(`SELECT 1 FROM "billing"."invoices" WHERE visit_id=$1 AND status <> 'Cancelled' AND is_deleted=false LIMIT 1`, [id])).rows.length;
+    await client.query(`UPDATE "scheduling"."visits" SET discount_status=$2, updated_at=now() WHERE id=$1`, [id, approve ? 'Applied' : 'Rejected']);
+    await audit(client, req.user, approve ? 'DISCOUNT_APPROVE' : 'DISCOUNT_REJECT', 'visits', id, { invoice_already_raised: !!inv }, req.ip);
+  });
+  res.json({ ok: true });
 }));
 
 /* ---------------------------------------------------------------- Queue */
