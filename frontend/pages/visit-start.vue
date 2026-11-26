@@ -102,14 +102,10 @@ async function decide(v: any, approve: boolean) { try { await api(`/visits/${v.i
                 <span>Register New Patient</span>
               </NuxtLink>
             </div>
-            <div style="display:flex; gap:8px; align-items:center">
-              <div style="flex:1">
+            <div>
+              <div>
                 <LookupSelect v-model="f.patient_id" resource="patients" placeholder="Name, MRN, QID or phone" />
               </div>
-              <NuxtLink v-if="can('patients.create')" to="/r/patients/new" class="btn p" style="white-space:nowrap; text-decoration:none; display:inline-flex; align-items:center; gap:6px; font-weight:600; padding:6px 14px" title="Register New Patient">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                <span>+ New Patient</span>
-              </NuxtLink>
             </div>
           </div>
           <div v-if="pat" class="field wide"><div class="pcard">
