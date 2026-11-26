@@ -526,6 +526,16 @@ const section = (t) => console.log(`\n== ${t}`);
   ok('payments work again after reopen', (await call(tk.reception, 'POST', `/billing/invoices/${vpI.data.invoice.id}/pay`, { amount: 5, method: 'Card' })).status === 200);
 
 
+  section('Server robustness');
+  const hl = await call(null, 'GET', '/health');
+  ok('health check reports db latency', hl.status === 200 && hl.data.ok && typeof hl.data.db_ms === 'number', hl.data);
+  const big = await call(tk.admin, 'POST', '/r/patients', { full_name: 'x'.repeat(3 * 1024 * 1024) });
+  ok('oversized body is refused cleanly (413)', big.status === 413, big.status);
+  ok('unknown API path is a clean 404', (await call(tk.admin, 'GET', '/nope/nothing')).status === 404);
+  ok('bad id does not crash (4xx, not 500)', (await call(tk.admin, 'GET', '/r/patients/abc')).status < 500 && (await call(tk.admin, 'GET', '/r/patients?page=-5&limit=zzz&sort=%27;drop')).status === 200);
+  const par = await Promise.all(Array.from({ length: 40 }, () => call(tk.admin, 'GET', '/r/patients?q=a b&limit=20')));
+  ok('40 parallel searches all succeed', par.every((x) => x.status === 200));
+
   console.log(`\n${passed} passed, ${failed.length} failed`);
   if (failed.length) { console.log('Failed:\n - ' + failed.join('\n - ')); process.exit(1); }
 })().catch((e) => { console.error('Test crashed:', e); process.exit(2); });

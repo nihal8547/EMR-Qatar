@@ -9,13 +9,29 @@ types.setTypeParser(1083, (v) => (v ? v.slice(0, 5) : v)); // time HH:MM
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgres://hms:hms_pass@localhost:5432/qatar_hms',
-  max: 10,
+  max: Number(process.env.DB_POOL_MAX || 20),
+  connectionTimeoutMillis: 8000,        // fail fast instead of hanging when the pool is exhausted / DB is down
+  idleTimeoutMillis: 30000,
+  statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS || 30000),   // a runaway query cannot hold a connection forever
+  idle_in_transaction_session_timeout: 60000,
+  keepAlive: true,
 });
+// An idle client erroring (DB restart) must never crash the process.
+pool.on('error', (e) => console.error('[db] idle client error:', e.message));
+
+const SLOW_MS = Number(process.env.SLOW_QUERY_MS || 500);
+const rawQuery = pool.query.bind(pool);
+pool.query = async (...args) => {
+  const t0 = Date.now();
+  try { return await rawQuery(...args); }
+  finally { const ms = Date.now() - t0; if (ms > SLOW_MS) console.warn(`[db] slow query ${ms}ms: ${String(args[0]?.text || args[0]).replace(/\s+/g, ' ').slice(0, 160)}`); }
+};
 
 const query = (text, params) => pool.query(text, params);
 
 async function tx(fn) {
   const client = await pool.connect();
+  client.on('error', () => {});
   try {
     await client.query('BEGIN');
     const res = await fn(client);

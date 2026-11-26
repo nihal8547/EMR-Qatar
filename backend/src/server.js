@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const db = require('./db');
 const reg = require('./registry');
 const hooks = require('./hooks');
@@ -14,6 +15,14 @@ hooks.validate(reg);
 
 const app = express();
 app.disable('x-powered-by');
+app.set('trust proxy', 1);
+app.use(compression({ threshold: 1024 }));
+// request timing: log slow API calls so loading problems are visible in the server log
+app.use((req, res, next) => {
+  const t0 = Date.now();
+  res.on('finish', () => { const ms = Date.now() - t0; if (req.path.startsWith('/api') && (ms > 1500 || res.statusCode >= 500)) console.warn(`[api] ${req.method} ${req.originalUrl.split('?')[0]} -> ${res.statusCode} in ${ms}ms`); });
+  next();
+});
 app.use((req, res, next) => {
   res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cache-Control': req.path.startsWith('/api') ? 'no-store' : 'no-cache' });
   next();
@@ -22,8 +31,9 @@ app.use(cors({ origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split('
 app.use(express.json({ limit: '2mb' }));
 
 app.get('/api/health', wrap(async (req, res) => {
+  const t0 = Date.now();
   await db.query('SELECT 1');
-  res.json({ ok: true, time: new Date().toISOString() });
+  res.json({ ok: true, time: new Date().toISOString(), db_ms: Date.now() - t0, uptime_s: Math.round(process.uptime()) });
 }));
 
 app.use('/api/auth', auth.router);
@@ -67,6 +77,7 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 // Serve the built Nuxt app (nuxt generate) so one process runs everything.
 const STATIC_DIR = process.env.STATIC_DIR || path.join(__dirname, '..', '..', 'frontend', '.output', 'public');
 if (fs.existsSync(path.join(STATIC_DIR, 'index.html'))) {
+  app.use('/_nuxt', express.static(path.join(STATIC_DIR, '_nuxt'), { index: false, maxAge: '365d', immutable: true }));   // hashed build files never change
   app.use(express.static(STATIC_DIR, { index: false, maxAge: '1h' }));
   app.get(/^\/(?!api\/).*/, (req, res) => res.sendFile(path.join(STATIC_DIR, '200.html')));
 }
@@ -75,6 +86,12 @@ if (fs.existsSync(path.join(STATIC_DIR, 'index.html'))) {
 app.use((err, req, res, next) => {
   if (err instanceof HttpError) return res.status(err.status).json({ error: err.message, ...(err.extra ? { extra: err.extra } : {}) });
   if (err && err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Invalid JSON' });
+  if (err && err.type === 'entity.too.large') return res.status(413).json({ error: 'Request is too large' });
+  if (err && (err.code === '57014')) return res.status(503).json({ error: 'The request took too long. Please narrow the search and try again.' });
+  if (err && (['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', '57P01', '53300', '08006', '08001'].includes(err.code) || /timeout exceeded when trying to connect|Connection terminated/i.test(err.message || ''))) {
+    console.error('[db] unavailable:', err.message);
+    return res.status(503).json({ error: 'The database is busy or unavailable. Please try again in a moment.' });
+  }
   if (err && ['22P02','22003','22007','22008','22001','23502','23503','23505','23514'].includes(err.code)) return res.status(400).json({ error: 'Invalid value in request' });
   console.error(err);
   return res.status(500).json({ error: 'Something went wrong on the server' });
@@ -82,6 +99,11 @@ app.use((err, req, res, next) => {
 
 const PORT = Number(process.env.PORT || 4000);
 if (require.main === module) {
-  app.listen(PORT, () => console.log(`Qatar HMS API listening on http://localhost:${PORT}`));
+  const server = app.listen(PORT, () => console.log(`Qatar HMS API listening on http://localhost:${PORT}`));
+  server.keepAliveTimeout = 65000; server.headersTimeout = 66000; server.requestTimeout = 60000;
+  process.on('unhandledRejection', (e) => console.error('[process] unhandledRejection:', e));
+  process.on('uncaughtException', (e) => console.error('[process] uncaughtException:', e));
+  const stop = (sig) => { console.log(`${sig}: shutting down`); server.close(() => db.pool.end().finally(() => process.exit(0))); setTimeout(() => process.exit(0), 10000).unref(); };
+  process.on('SIGTERM', () => stop('SIGTERM')); process.on('SIGINT', () => stop('SIGINT'));
 }
 module.exports = app;

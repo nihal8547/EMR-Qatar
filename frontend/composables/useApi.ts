@@ -16,13 +16,19 @@ export function useApi() {
     const token = import.meta.client ? localStorage.getItem(TOKEN_KEY) : null
     const query: Record<string, any> = {}
     for (const [k, v] of Object.entries(opts.query || {})) if (v !== undefined && v !== null && v !== '') query[k] = v
+    const method = (opts.method || 'GET').toUpperCase()
     try {
+      // Reads are retried (twice) on network drops / gateway errors; writes are never retried (no double posting).
       return await $fetch<T>(`/api${path}`, {
-        method: (opts.method || 'GET') as any,
+        method: method as any,
         body: opts.body,
         query,
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         responseType: opts.raw ? 'blob' : undefined,
+        timeout: opts.raw ? 120000 : 40000,
+        retry: method === 'GET' ? 2 : 0,
+        retryDelay: 400,
+        retryStatusCodes: [502, 503, 504],
       } as any) as T
     } catch (e: any) {
       const status = e?.response?.status || e?.statusCode || 0
@@ -32,7 +38,7 @@ export function useApi() {
         useAuth().reset()
         await navigateTo('/login')
       }
-      const msg = (data && typeof data === 'object' && data.error) || (status === 0 ? 'Cannot reach the server. Check your connection.' : 'Request failed')
+      const msg = (data && typeof data === 'object' && data.error) || (status === 0 ? (e?.name === 'TimeoutError' || /timeout|aborted/i.test(String(e?.message)) ? 'The server took too long to answer. Please try again.' : 'Cannot reach the server. Check your connection.') : status >= 500 ? 'Server problem. Please try again in a moment.' : 'Request failed')
       throw new ApiError(String(msg), status, data && data.extra)
     }
   }
