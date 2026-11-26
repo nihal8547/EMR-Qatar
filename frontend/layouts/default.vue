@@ -22,6 +22,14 @@ const crumb = computed(() => { for (const g of state.value.menu) for (const i of
   if (p.startsWith('/print/')) return { mod: '', page: 'Print' }
   return { mod: '', page: '' } })
 watch(() => route.path, () => { open.value = false })
+// Paper size for every print page (A4 / A5 / as designed). Remembered per browser.
+const isPrint = computed(() => route.path.startsWith('/print/') && !route.path.startsWith('/print/lab-labels'))
+const paper = ref<'auto' | 'a4' | 'a5'>('auto')
+const orient = ref<'portrait' | 'landscape'>('portrait')
+onMounted(() => { try { const v = localStorage.getItem('hms.paper'); if (v === 'a4' || v === 'a5' || v === 'auto') paper.value = v; if (localStorage.getItem('hms.orient') === 'landscape') orient.value = 'landscape' } catch { /* storage unavailable */ } })
+watch([paper, orient], () => { try { localStorage.setItem('hms.paper', paper.value); localStorage.setItem('hms.orient', orient.value) } catch { /* ignore */ } })
+const paperCls = computed(() => (isPrint.value && paper.value !== 'auto' ? `paper-${paper.value} ${orient.value}` : ''))
+useHead({ style: [{ key: 'paper', innerHTML: computed(() => (isPrint.value && paper.value !== 'auto' ? `@media print{@page{size:${paper.value.toUpperCase()} ${orient.value};margin:8mm}}` : '')) }] })
 </script>
 <template>
   <div class="app">
@@ -56,7 +64,10 @@ watch(() => route.path, () => { open.value = false })
         <div class="sp"></div>
         <span class="chip">{{ new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) }}</span>
       </header>
-      <main class="content"><slot /></main>
+      <main class="content" :class="paperCls"><slot /></main>
+      <div v-if="isPrint" class="paperbar no-print"><span class="small">Paper</span>
+        <button v-for="o in ['auto', 'a4', 'a5']" :key="o" class="sm" :class="{ p: paper === o }" @click="paper = o as any">{{ o === 'auto' ? 'As designed' : o.toUpperCase() }}</button>
+        <template v-if="paper !== 'auto'"><span class="small">·</span><button class="sm" :class="{ p: orient === 'portrait' }" @click="orient = 'portrait'">Portrait</button><button class="sm" :class="{ p: orient === 'landscape' }" @click="orient = 'landscape'">Landscape</button></template></div>
     </div>
     <div class="toasts"><div v-for="t in toasts" :key="t.id" class="toast" :class="t.kind">{{ t.text }}</div></div>
   </div>
