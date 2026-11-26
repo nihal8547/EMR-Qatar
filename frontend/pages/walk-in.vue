@@ -1,7 +1,10 @@
 <script setup lang="ts">
 definePageMeta({ perm: 'walkin.create' })
 const { api } = useApi(); const { ok, err } = useUi(); const { can } = useAuth()
-const cat = ref<any>({ tests: [], panels: [], studies: [], modalities: [] })
+const cat = ref<any>({ groups: [], panels: [], modalities: [] })
+const picks = reactive<Record<string, any>>({})   // selected tests / studies (name + price) kept for the bill preview
+const testFetch = async ({ q, group, ids }: any) => { const r: any[] = await api('/walkin/search', { query: { kind: 'test', q, group: group || undefined, ids: ids?.join(',') || undefined } }); r.forEach((t) => (picks['t' + t.id] = t)); return r.map((t) => ({ id: t.id, name: t.name, sub: t.code, group: t.sample_type, price: t.price })) }
+const studyFetch = async ({ q, ids }: any) => { const r: any[] = await api('/walkin/search', { query: { kind: 'study', q, ids: ids?.join(',') || undefined } }); r.forEach((t) => (picks['s' + t.id] = t)); return r.map((t) => ({ id: t.id, name: t.name, sub: t.code, price: t.price })) }
 const f = reactive<any>({ patient_id: null, referred_by: '', priority: 'Routine', notes: '', test_ids: [] as number[], study_ids: [] as number[], collect: true, method: 'Cash', reference: '', discount_pct: '' })
 const pat = ref<any>(null)
 const reg = reactive<any>({ on: false, full_name: '', gender: 'Male', dob: '', age: '', phone: '', qid: '', busy: false })
@@ -9,13 +12,10 @@ const busy = ref(false); const result = ref<any>(null)
 onMounted(async () => { try { cat.value = await api('/walkin/catalog') } catch (e) { err(e) } })
 watch(() => f.patient_id, async (id) => { pat.value = null; if (id) { try { pat.value = await api(`/r/patients/${id}`) } catch { /* ignore */ } } })
 watch(() => reg.age, (a) => { const n = Number(a); if (n > 0 && n < 120 && !reg.dob) reg.dob = `${new Date().getFullYear() - n}-01-01` })
-const testItems = computed(() => cat.value.tests.map((t: any) => ({ id: t.id, name: t.name, sub: t.code, group: t.sample_type, price: t.price })))
-const testGroups = computed(() => [...new Set(cat.value.tests.map((t: any) => t.sample_type).filter(Boolean))] as string[])
-const studyItems = computed(() => cat.value.studies.map((s: any) => ({ id: s.id, name: s.name, sub: s.code, price: s.price })))
 function addPanel(p: any) { f.test_ids = [...new Set([...f.test_ids, ...(p.test_ids || []).map(Number)])] }
 const chosen = computed(() => [
-  ...f.test_ids.map((id: number) => { const t = cat.value.tests.find((x: any) => x.id === id); return t && { kind: 'Lab', name: t.name, price: Number(t.price || 0) } }),
-  ...f.study_ids.map((id: number) => { const s = cat.value.studies.find((x: any) => x.id === id); return s && { kind: 'X-ray / Imaging', name: s.name, price: Number(s.price || 0) } }),
+  ...f.test_ids.map((id: number) => { const t = picks['t' + id]; return t && { kind: 'Lab', name: t.name, price: Number(t.price || 0) } }),
+  ...f.study_ids.map((id: number) => { const s = picks['s' + id]; return s && { kind: 'X-ray / Imaging', name: s.name, price: Number(s.price || 0) } }),
 ].filter(Boolean) as any[])
 const listTotal = computed(() => chosen.value.reduce((a, c) => a + c.price, 0))
 const discPct = computed(() => Math.min(100, Math.max(0, Number(f.discount_pct) || 0)))
@@ -87,10 +87,10 @@ function again() { result.value = null; pat.value = null; Object.assign(f, { pat
         </div>
         <div class="card"><h2>2 · Lab tests</h2>
           <div v-if="cat.panels.length" class="bar" style="gap:4px;flex-wrap:wrap"><span class="small muted">Panels:</span><button v-for="p in cat.panels" :key="p.id" class="sm" type="button" @click="addPanel(p)">+ {{ p.name }}</button></div>
-          <SearchPick v-model="f.test_ids" :items="testItems" :groups="testGroups" multiple placeholder="Search test name or code (e.g. CBC, glucose, HbA1c)" />
+          <SearchPick v-model="f.test_ids" :fetcher="testFetch" :groups="cat.groups" multiple placeholder="Search test name or code (e.g. CBC, glucose, HbA1c)" />
         </div>
         <div class="card"><h2>3 · X-ray / imaging</h2>
-          <SearchPick v-model="f.study_ids" :items="studyItems" multiple placeholder="Search X-ray, CT, MRI, ultrasound… (e.g. chest, knee, abdomen)" />
+          <SearchPick v-model="f.study_ids" :fetcher="studyFetch" multiple placeholder="Search X-ray, CT, MRI, ultrasound… (e.g. chest, knee, abdomen)" />
         </div>
       </div>
       <div>

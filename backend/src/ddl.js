@@ -27,6 +27,7 @@ function buildDDL() {
   const out = [];
   out.push('-- Qatar HMS: generated from backend/src/registry. DO NOT EDIT BY HAND.');
   out.push('-- Regenerate with: npm run db:build');
+  out.push('CREATE EXTENSION IF NOT EXISTS pg_trgm;');
   const schemas = new Set();
   for (const key of reg.order) schemas.add(reg.resources[key].schema);
   for (const s of ['auth', 'admin']) schemas.add(s);
@@ -61,6 +62,9 @@ CREATE TABLE IF NOT EXISTS "admin"."counters" (
         const tr = reg.target(f.ref);
         fks.push(`ALTER TABLE ${fq(r)} ADD CONSTRAINT ${q(`fk_${r.table}_${f.name}`)} FOREIGN KEY (${q(f.name)}) REFERENCES ${fq(tr)}("id");`);
         idx.push(`CREATE INDEX ${q(`ix_${r.table}_${f.name}`)} ON ${fq(r)} (${q(f.name)});`);
+      }
+      if (f.search && !f.secret && sqlType(f) === 'text') {
+        idx.push(`CREATE INDEX ${q(`tg_${r.table}_${f.name}`)} ON ${fq(r)} USING gin ((${q(f.name)}::text) gin_trgm_ops);`);
       }
       if (f.unique || f.auto) {
         idx.push(`CREATE UNIQUE INDEX ${q(`ux_${r.table}_${f.name}`)} ON ${fq(r)} (${q(f.name)}) WHERE "is_deleted" = false AND ${q(f.name)} IS NOT NULL;`);

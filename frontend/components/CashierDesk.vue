@@ -9,7 +9,7 @@ const openCash = ref<number | null>(0); const closeCash = ref<number | null>(nul
 
 const chip = ref('all')
 const CHIPS: [string, string][] = [['all', 'All'], ['due', 'Has dues'], ['Lab', 'Lab tests'], ['Radiology', 'X-ray / Imaging'], ['Consultation', 'Consultation'], ['Procedure', 'Procedures'], ['Pharmacy', 'Pharmacy']]
-const shown = computed(() => list.value.filter((v: any) => chip.value === 'all' ? true : chip.value === 'due' ? (Number(v.pending_amount) > 0 || Number(v.balance) > 0) : String(v.sources || '').split(',').includes(chip.value)))
+const total = ref(0); const page = ref(1); const loadingList = ref(false)
 const bySource = computed(() => { const o: Record<string, number> = {}; for (const c of d.value?.pending || []) o[c.source] = (o[c.source] || 0) + Number(c.amount); return o })
 const REMOVABLE = ['Lab', 'Radiology', 'Procedure', 'Manual']
 async function removeItem(c: any) {
@@ -33,7 +33,16 @@ async function quickCollect() {
 }
 const discTouched = ref(false)
 async function decideCheckin(approve: boolean) { try { await api(`/visits/${sel.value}/discount/decision`, { method: 'POST', body: { approve } }); ok(approve ? 'Discount approved' : 'Discount rejected'); await loadVisit() } catch (e) { err(e) } }
-async function loadList() { try { list.value = await api('/billing/worklist', { query: { q: q.value } }) } catch (e) { err(e) } }
+let listSeq = 0
+async function loadList(more = false) {
+  if (!more) page.value = 1
+  const my = ++listSeq; loadingList.value = true
+  try { const r = await api('/billing/worklist', { query: { q: q.value || undefined, chip: chip.value, page: page.value, limit: 30 } }); if (my !== listSeq) return; list.value = more ? [...list.value, ...r.rows] : r.rows; total.value = r.total } catch (e) { err(e) } finally { if (my === listSeq) loadingList.value = false }
+}
+async function loadMore() { page.value += 1; await loadList(true) }
+let qTimer: any
+watch(q, () => { clearTimeout(qTimer); qTimer = setTimeout(() => loadList(), 300) })
+watch(chip, () => loadList())
 async function loadSess() { try { sess.value = await api('/billing/session/current') } catch (e) { err(e) } }
 async function loadVisit() {
   if (!sel.value) { d.value = null; return }
@@ -47,7 +56,6 @@ async function loadVisit() {
   } catch (e) { err(e); d.value = null }
 }
 onMounted(() => { loadList(); loadSess(); loadVisit() })
-let t: any; watch(q, () => { clearTimeout(t); t = setTimeout(loadList, 300) })
 watch(sel, loadVisit)
 const inv = computed(() => d.value?.invoice?.invoice)
 const pendTotal = computed(() => (d.value?.pending || []).reduce((s: number, c: any) => s + Number(c.amount), 0))
@@ -94,9 +102,9 @@ async function closeSession() {
     <div class="split">
       <div class="card flush" style="max-height:78vh;overflow:auto"><div style="padding:8px"><input v-model="q" placeholder="Search visit, patient, MRN, phone" /></div>
         <div v-if="front" class="bar" style="padding:0 8px;gap:4px;flex-wrap:wrap"><button v-for="[k, l] in CHIPS" :key="k" class="sm" :class="{ p: chip === k }" @click="chip = k">{{ l }}</button></div>
-        <div v-for="v in shown" :key="v.id" class="list-item" :class="{ on: sel === v.id }" @click="sel = v.id"><div><b>{{ v.visit_no }}</b> <span class="badge" :class="badgeClass(v.status)">{{ v.status }}</span> <span class="badge">{{ v.payer_type }}</span></div>
+        <div v-for="v in list" :key="v.id" class="list-item" :class="{ on: sel === v.id }" @click="sel = v.id"><div><b>{{ v.visit_no }}</b> <span class="badge" :class="badgeClass(v.status)">{{ v.status }}</span> <span class="badge">{{ v.payer_type }}</span></div>
           <div>{{ v.full_name }} <span class="small muted">{{ v.mrn }}</span></div><div class="small"><span v-if="Number(v.pending_amount) > 0" style="color:var(--warn)">Unbilled {{ money(v.pending_amount) }}</span> <span v-if="v.invoice_no" class="muted">{{ v.invoice_no }}</span> <span v-if="front && v.sources" class="muted">· {{ v.sources.split(',').join(' / ') }}</span> <span v-if="Number(v.balance) > 0" style="color:var(--bad)">Due {{ money(v.balance) }}</span></div></div>
-        <div v-if="!shown.length" class="empty">No visits found.</div></div>
+        <div v-if="!list.length && !loadingList" class="empty">No visits found.</div><div v-if="list.length < total" class="bar" style="padding:8px"><button class="sm" :disabled="loadingList" @click="loadMore">Load more ({{ list.length }} of {{ total }})</button></div></div>
       <div v-if="d">
         <div class="card"><div class="bar" style="margin:0"><div><h2 style="margin:0">{{ d.patient.full_name }}</h2><span class="muted small">{{ d.patient.mrn }} · {{ d.visit.visit_no }} · {{ d.visit.payer_type }}</span></div><div class="sp"></div>
           <span v-if="d.deposit_balance > 0" class="badge blue">Deposit {{ money(d.deposit_balance) }}</span><span class="badge" :class="badgeClass(d.visit.status)">{{ d.visit.status }}</span></div>

@@ -131,14 +131,26 @@ function buildWhere(res, query) {
     }
   }
   const search = res.fields.filter((f) => f.search && !f.secret);
-  if (query.q && (search.length || patientSearchSQL(res, 't', '$0'))) {
-    params.push(`%${String(query.q).trim()}%`);
-    const p = `$${params.length}`;
-    where.push(`(${[...search.map((f) => `t.${q(f.name)}::text ILIKE ${p}`), 'false'].join(' OR ')}${patientSearchSQL(res, 't', p)})`);
-  }
+  const sc = searchClause(res, 't', search, query.q, params);
+  if (sc) where.push(sc);
   return { where: where.join(' AND '), params };
 }
 
+
+
+/** Server-side text search: every word must match (AND), each word may match any search field (OR). % and _ are escaped. */
+function searchClause(res, alias, fields, text, params) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean).slice(0, 5);
+  if (!words.length) return '';
+  const hasPat = !!patientSearchSQL(res, alias, '$0');
+  if (!fields.length && !hasPat) return '';
+  const parts = words.map((w) => {
+    params.push(`%${w.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+    const p = `$${params.length}`;
+    return `(${[...fields.map((f) => `${alias}.${q(f.name)}::text ILIKE ${p}`), 'false'].join(' OR ')}${patientSearchSQL(res, alias, p)})`;
+  });
+  return parts.join(' AND ');
+}
 
 // Records that belong to a patient (have a patient_id -> patients ref) are also found by that patient's MRN, name, QID or phone.
 function patientSearchSQL(res, alias, p) {
@@ -240,11 +252,8 @@ router.get('/lookup/:key', wrap(async (req, res) => {
     where.push(`t.${q(f.name)} = $${params.length}`);
   }
   if (req.query.q) {
-    const s = tr.fields.filter((f) => (f.search || tr.disp.includes(f.name)) && !f.secret && f.type !== 'ref');
-    if (s.length || patientSearchSQL(tr, 't', '$0')) {
-      params.push(`%${String(req.query.q).trim()}%`);
-      where.push(`(${[...s.map((f) => `t.${q(f.name)}::text ILIKE $${params.length}`), 'false'].join(' OR ')}${patientSearchSQL(tr, 't', `$${params.length}`)})`);
-    }
+    const sc = searchClause(tr, 't', tr.fields.filter((f) => (f.search || tr.disp.includes(f.name)) && !f.secret && f.type !== 'ref'), req.query.q, params);
+    if (sc) where.push(sc);
   }
   const sql = `SELECT t."id", ${dispExpr(tr, 't')} AS label FROM ${fq(tr)} t WHERE ${where.join(' AND ')} ORDER BY label LIMIT 30`;
   res.json((await db.query(sql, params)).rows);

@@ -7,14 +7,33 @@ const { wrap, bad, forbidden, need, can, audit, addCharge, getVisit } = require(
 
 const router = express.Router();
 
+/** Small lists only (panels, modalities, sample types). Tests and studies are searched on the server. */
 router.get('/walkin/catalog', need('walkin.create'), wrap(async (req, res) => {
-  const [tests, panels, studies, mods] = await Promise.all([
-    db.query(`SELECT t.id, t.code, t.name, t.sample_type, s.price FROM "lab"."lab_tests" t LEFT JOIN "billing"."services" s ON s.id=t.service_id WHERE t.active AND t.is_deleted=false ORDER BY t.name`),
+  const [groups, panels, mods] = await Promise.all([
+    db.query(`SELECT DISTINCT sample_type FROM "lab"."lab_tests" WHERE active AND is_deleted=false AND sample_type IS NOT NULL ORDER BY 1`),
     db.query(`SELECT p.id, p.name, COALESCE(array_agg(pt.test_id) FILTER (WHERE pt.test_id IS NOT NULL), '{}') AS test_ids FROM "lab"."lab_panels" p LEFT JOIN "lab"."lab_panel_tests" pt ON pt.panel_id=p.id AND pt.is_deleted=false WHERE p.is_deleted=false GROUP BY p.id ORDER BY p.name`),
-    db.query(`SELECT id, code, name, price FROM "billing"."services" WHERE category='Radiology' AND active AND is_deleted=false ORDER BY name`),
     db.query(`SELECT id, name FROM "radiology"."imaging_modalities" WHERE is_deleted=false ORDER BY name`),
   ]);
-  res.json({ tests: tests.rows, panels: panels.rows, studies: studies.rows, modalities: mods.rows });
+  res.json({ groups: groups.rows.map((r) => r.sample_type), panels: panels.rows, modalities: mods.rows });
+}));
+
+/** Server-side search: kind=test|study, q (all words must match name or code), group (sample type), ids (fetch given ids). */
+router.get('/walkin/search', need('walkin.create'), wrap(async (req, res) => {
+  const kind = req.query.kind === 'study' ? 'study' : 'test';
+  const params = []; const where = [];
+  const words = String(req.query.q || '').trim().split(/\s+/).filter(Boolean).slice(0, 5);
+  const col = kind === 'study' ? ['s.name', 's.code'] : ['t.name', 't.code'];
+  for (const w of words) { params.push(`%${w.replace(/[\\%_]/g, (c) => `\\${c}`)}%`); where.push(`(${col[0]} ILIKE $${params.length} OR ${col[1]} ILIKE $${params.length})`); }
+  const ids = String(req.query.ids || '').split(',').map(Number).filter(Boolean).slice(0, 200);
+  if (ids.length) { params.push(ids); where.push(`${kind === 'study' ? 's' : 't'}.id = ANY($${params.length}::bigint[])`); }
+  let sql;
+  if (kind === 'study') {
+    sql = `SELECT s.id, s.code, s.name, s.price FROM "billing"."services" s WHERE s.category='Radiology' AND s.active AND s.is_deleted=false${where.length ? ' AND ' + where.join(' AND ') : ''} ORDER BY s.name LIMIT 60`;
+  } else {
+    if (req.query.group) { params.push(String(req.query.group)); where.push(`t.sample_type = $${params.length}`); }
+    sql = `SELECT t.id, t.code, t.name, t.sample_type, s.price FROM "lab"."lab_tests" t LEFT JOIN "billing"."services" s ON s.id=t.service_id WHERE t.active AND t.is_deleted=false${where.length ? ' AND ' + where.join(' AND ') : ''} ORDER BY t.name LIMIT 60`;
+  }
+  res.json((await db.query(sql, params)).rows);
 }));
 
 router.post('/walkin', need('walkin.create'), wrap(async (req, res) => {

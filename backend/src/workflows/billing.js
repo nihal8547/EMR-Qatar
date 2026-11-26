@@ -11,21 +11,26 @@ const router = express.Router();
 router.get('/billing/worklist', need('billing.cashier'), wrap(async (req, res) => {
   const params = [];
   let where = `v.is_deleted=false AND v.status <> 'Cancelled'`;
-  if (req.query.q) {
-    params.push(`%${req.query.q}%`);
-    where += ` AND (p.full_name ILIKE $1 OR p.mrn ILIKE $1 OR v.visit_no ILIKE $1 OR p.phone ILIKE $1)`;
-  } else if (req.query.all !== '1') {
-    where += ` AND (v.visit_date = CURRENT_DATE OR v.status <> 'Completed')`;
+  const words = String(req.query.q || '').trim().split(/\s+/).filter(Boolean).slice(0, 5);
+  for (const w of words) {
+    params.push(`%${w.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+    where += ` AND (p.full_name ILIKE $${params.length} OR p.mrn ILIKE $${params.length} OR v.visit_no ILIKE $${params.length} OR p.phone ILIKE $${params.length} OR p.qid ILIKE $${params.length})`;
   }
+  if (!words.length && req.query.all !== '1') where += ` AND (v.visit_date = CURRENT_DATE OR v.status <> 'Completed')`;
+  const pend = `SELECT c.visit_id, SUM(c.amount) AS amt, string_agg(DISTINCT c.source, ',') AS sources FROM "billing"."charges" c WHERE c.status='Pending' AND c.is_deleted=false GROUP BY c.visit_id`;
+  const inv = `SELECT DISTINCT ON (i.visit_id) i.visit_id, i.invoice_no, i.balance FROM "billing"."invoices" i WHERE i.status <> 'Cancelled' AND i.is_deleted=false ORDER BY i.visit_id, i.id DESC`;
+  const chip = String(req.query.chip || 'all');
+  if (chip === 'due') where += ` AND (COALESCE(pc.amt,0) > 0 OR COALESCE(iv.balance,0) > 0)`;
+  else if (chip !== 'all') { params.push(chip); where += ` AND $${params.length} = ANY(string_to_array(COALESCE(pc.sources,''), ','))`; }
+  const limit = Math.min(Math.max(parseInt(req.query.limit || '30', 10) || 30, 1), 100);
+  const page = Math.max(parseInt(req.query.page || '1', 10) || 1, 1);
+  const from = `FROM "scheduling"."visits" v JOIN "mpi"."patients" p ON p.id=v.patient_id LEFT JOIN (${pend}) pc ON pc.visit_id=v.id LEFT JOIN (${inv}) iv ON iv.visit_id=v.id WHERE ${where}`;
+  const total = (await db.query(`SELECT count(*)::int n ${from}`, params)).rows[0].n;
   const { rows } = await db.query(
     `SELECT v.id, v.visit_no, v.visit_date, v.status, v.payer_type, p.mrn, p.full_name,
-            COALESCE((SELECT SUM(c.amount) FROM "billing"."charges" c WHERE c.visit_id=v.id AND c.status='Pending' AND c.is_deleted=false),0) AS pending_amount,
-            COALESCE((SELECT string_agg(DISTINCT c.source, ',') FROM "billing"."charges" c WHERE c.visit_id=v.id AND c.status='Pending' AND c.is_deleted=false),'') AS sources,
-            (SELECT i.invoice_no FROM "billing"."invoices" i WHERE i.visit_id=v.id AND i.status <> 'Cancelled' AND i.is_deleted=false ORDER BY i.id DESC LIMIT 1) AS invoice_no,
-            (SELECT i.balance FROM "billing"."invoices" i WHERE i.visit_id=v.id AND i.status <> 'Cancelled' AND i.is_deleted=false ORDER BY i.id DESC LIMIT 1) AS balance
-       FROM "scheduling"."visits" v JOIN "mpi"."patients" p ON p.id=v.patient_id
-      WHERE ${where} ORDER BY v.id DESC LIMIT 60`, params);
-  res.json(rows);
+            COALESCE(pc.amt,0) AS pending_amount, COALESCE(pc.sources,'') AS sources, iv.invoice_no, iv.balance
+       ${from} ORDER BY v.id DESC LIMIT ${limit} OFFSET ${(page - 1) * limit}`, params);
+  res.json({ rows, total, page, limit });
 }));
 
 async function invoiceBundle(id) {

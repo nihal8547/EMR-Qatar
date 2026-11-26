@@ -150,10 +150,12 @@ function query() {
   if (dateField.value) { if (state.from) q['from_' + dateField.value.name] = state.from; if (state.to) q['to_' + dateField.value.name] = state.to }
   return q
 }
+let loadSeq = 0
 async function load() {
   if (!m.value) return
+  const my = ++loadSeq   // ignore answers that arrive after a newer search was sent
   loading.value = true
-  try { const r = await api(`/r/${key.value}`, { query: query() }); rows.value = r.rows; total.value = r.total } catch (e) { err(e) } finally { loading.value = false }
+  try { const r = await api(`/r/${key.value}`, { query: query() }); if (my !== loadSeq) return; rows.value = r.rows; total.value = r.total } catch (e) { if (my === loadSeq) err(e) } finally { if (my === loadSeq) loading.value = false }
 }
 async function init() {
   const meta = await ensure()
