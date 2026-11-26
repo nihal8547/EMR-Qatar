@@ -97,7 +97,7 @@ router.post('/visits/start', need('visits.start'), wrap(async (req, res) => {
     const svc = await vp.pickConsultService(client, visit_type, department_id);
     if (svc) {
       const visit = await getVisit(client, vid);
-      await addCharge(client, { visit, service_id: svc.id, source: 'Consultation', source_id: vid, user: req.user });
+      await addCharge(client, { visit, service_id: svc.id, unit_price: await vp.consultUnitPrice(client, svc.id, visit, doctor.id, visit_type), source: 'Consultation', source_id: vid, user: req.user });
     } else warnings.push('No consultation service found in the price list; no consultation charge was added.');
 
     await audit(client, req.user, 'VISIT_START', 'visits', vid, { visit_no, payer_type, discount: discount ? { ...discount, status: discStatus } : undefined }, req.ip);

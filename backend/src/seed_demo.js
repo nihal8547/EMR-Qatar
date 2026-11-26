@@ -44,6 +44,7 @@ async function workflows() {
   const users = await rows('admin', 'users');
   const u = (n) => users.find((x) => x.username === n);
   const sara = u('drsara'); const ravi = u('drravi'); const dent = u('drdental');
+  for (const [d, fee] of [[sara, 75], [ravi, 60], [dent, 80]]) await must('doctor follow-up fee', 'admin', 'POST', '/r/doctor_fees', { doctor_id: d.id, visit_type: 'Follow-up', fee, notes: 'Demo follow-up fee' });
   const drugs = await all('drsara', 'drugs'); const dr = (c) => drugs.find((d) => d.code === c);
   const tests = await all('drsara', 'lab_tests'); const lt = (c) => tests.find((t) => t.code === c);
   const svcs = await all('admin', 'services'); const sv = (c) => svcs.find((s) => s.code === c);

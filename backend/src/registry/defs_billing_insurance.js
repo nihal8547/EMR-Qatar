@@ -14,6 +14,16 @@ module.exports = (R) => {
     'active:bool:Active:list,def=true',
   ], { schema: 'billing', disp: ['code', 'name'] });
 
+  R('doctor_fees', 'billing', 'Doctor Consultation Fees', [
+    'doctor_id:ref=doctors:Doctor:req,list,filter',
+    'visit_type:select=Any/OPD/Follow-up/Tele/Emergency:Applies to:req,list,def=Any',
+    'fee:money:Consultation fee (QAR):req,list',
+    'valid_from:date:Valid from:list',
+    'valid_to:date:Valid until:list',
+    'active:bool:Active:list,def=true',
+    'notes:text:Notes',
+  ], { schema: 'billing', disp: ['id'], help: 'Fee for a particular doctor. Without a row here the department fee from Service Master is used. A fee for a specific visit type (e.g. Follow-up) beats "Any". Insurer / corporate price lists that set a special consultation price still win over this fee.' });
+
   R('price_lists', 'billing', 'Price Lists (Payer / Corporate)', [
     'name:text::req,list,search',
     'payer_id:ref=payers:Insurance payer:list',

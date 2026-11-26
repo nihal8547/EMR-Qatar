@@ -3,7 +3,7 @@
 const db = require('./db');
 const billing = require('./billingCore');
 const vp = require('./visitPricing');
-const { bad, conflict, audit, getVisit, addCharge, round2 } = require('./lib');
+const { bad, conflict, audit, getVisit, addCharge, round2, priceFor } = require('./lib');
 
 async function paidAmount(client, visitId) {
   return Number((await client.query(
@@ -48,13 +48,16 @@ async function syncConsultCharge(client, user, visitId) {
   const svc = await vp.pickConsultService(client, v.visit_type, v.department_id);
   const cur = (await client.query(
     `SELECT c.* FROM "billing"."charges" c WHERE c.visit_id=$1 AND c.source='Consultation' AND c.is_deleted=false AND c.status <> 'Cancelled' ORDER BY c.id DESC LIMIT 1`, [visitId])).rows[0];
-  if (!svc || (cur && Number(cur.service_id) === Number(svc.id))) return null;
+  if (!svc) return null;
+  const unit = await vp.consultUnitPrice(client, svc.id, v, v.doctor_id, v.visit_type);
+  const wanted = unit !== undefined ? unit : (await priceFor(client, svc.id, v)).price;
+  if (cur && Number(cur.service_id) === Number(svc.id) && Math.abs(Number(cur.unit_price) - wanted) < 0.005) return null;
   if (cur && cur.status === 'Invoiced') {
     const inv = (await client.query(`SELECT * FROM "billing"."invoices" WHERE id=$1`, [cur.invoice_id])).rows[0];
     if (inv && Number(inv.paid) > 0.005) return 'The consultation fee was already paid, so the fee was not changed. Use a bill cancel request if it must be corrected.';
   }
   if (cur) await client.query(`UPDATE "billing"."charges" SET status='Cancelled', updated_at=now() WHERE id=$1`, [cur.id]);
-  await addCharge(client, { visit: v, service_id: svc.id, source: 'Consultation', source_id: visitId, user });
+  await addCharge(client, { visit: v, service_id: svc.id, unit_price: unit, source: 'Consultation', source_id: visitId, user });
   if (cur && cur.status === 'Invoiced') await billing.createOrRefreshInvoice(client, user, visitId, {});
   return null;
 }

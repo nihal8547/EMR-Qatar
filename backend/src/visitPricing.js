@@ -14,6 +14,25 @@ async function pickConsultService(client, visitType, departmentId) {
   return svc || null;
 }
 
+/** Doctor-specific consultation fee (Doctor Consultation Fees), or null when none is set. */
+async function doctorFee(client, doctorId, visitType, day) {
+  if (!doctorId) return null;
+  const r = (await client.query(
+    `SELECT fee FROM "billing"."doctor_fees"
+      WHERE doctor_id=$1 AND active AND is_deleted=false AND visit_type IN ($2,'Any')
+        AND (valid_from IS NULL OR valid_from <= COALESCE($3::date, CURRENT_DATE)) AND (valid_to IS NULL OR valid_to >= COALESCE($3::date, CURRENT_DATE))
+      ORDER BY (visit_type=$2) DESC, id DESC LIMIT 1`, [doctorId, visitType || 'OPD', day || null])).rows[0];
+  return r ? Number(r.fee) : null;
+}
+
+/** Unit price to charge for the consultation: the doctor's fee when set (unless an insurer / corporate list prices it differently), otherwise undefined = standard price. */
+async function consultUnitPrice(client, serviceId, visitLike, doctorId, visitType) {
+  const fee = await doctorFee(client, doctorId, visitType);
+  if (fee === null) return undefined;
+  const { price, service } = await priceFor(client, serviceId, visitLike);
+  return round2(price) === round2(Number(service.price)) ? round2(fee) : undefined;
+}
+
 /** Validate a discount request {type: percent|amount, value, reason}. Returns null when none was asked. */
 function parseDiscount(d) {
   if (!d || d.value === undefined || d.value === null || d.value === '') return null;
@@ -41,8 +60,11 @@ async function estimate(client, user, { doctor, visit_type, payer_type, policy, 
   const svc = await pickConsultService(client, visit_type, dept);
   if (!svc) return { service: null, warnings: ['No consultation service is configured in the price list.'] };
   const visitLike = { payer_type, policy_id: policy ? policy.id : null, policy_payer_id: policy ? policy.payer_id : null, corporate_id: corporate ? corporate.id : null };
-  const { price, service } = await priceFor(client, svc.id, visitLike);
-  const cash = Number(service.price);
+  let { price, service } = await priceFor(client, svc.id, visitLike);
+  let cash = Number(service.price);
+  const dUnit = await consultUnitPrice(client, svc.id, visitLike, doctor && doctor.id, visit_type);
+  const doctorFeeUsed = dUnit !== undefined;
+  if (doctorFeeUsed) { price = dUnit; cash = dUnit; }
   let plan = null;
   if (payer_type === 'Insurance' && policy && policy.plan_id) plan = (await client.query(`SELECT * FROM "insurance"."plans" WHERE id=$1`, [policy.plan_id])).rows[0] || null;
   const pct = pctOf(discount, price);
@@ -51,7 +73,7 @@ async function estimate(client, user, { doctor, visit_type, payer_type, policy, 
   if (service.needs_preauth && payer_type === 'Insurance') warnings.push('Needs pre-authorisation from the insurer.');
   return {
     service: { id: service.id, code: service.code, name: service.name }, cash_price: cash, price: round2(price),
-    price_basis: round2(price) === round2(cash) ? 'Standard price' : (payer_type === 'Corporate' ? 'Corporate price list' : 'Insurer price list'),
+    price_basis: doctorFeeUsed ? "Doctor's fee" : round2(price) === round2(cash) ? 'Standard price' : (payer_type === 'Corporate' ? 'Corporate price list' : 'Insurer price list'),
     covered: service.covered, needs_preauth: service.needs_preauth,
     plan: plan ? { name: plan.name, copay_pct: Number(plan.copay_pct), copay_max: Number(plan.copay_max || 0), annual_limit: plan.annual_limit == null ? null : Number(plan.annual_limit) } : null,
     discount: discount ? { ...discount, pct, authority: authority(user, pct) } : null,
@@ -59,4 +81,4 @@ async function estimate(client, user, { doctor, visit_type, payer_type, policy, 
   };
 }
 
-module.exports = { pickConsultService, parseDiscount, pctOf, authority, estimate };
+module.exports = { doctorFee, consultUnitPrice, pickConsultService, parseDiscount, pctOf, authority, estimate };

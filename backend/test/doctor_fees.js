@@ -1,0 +1,25 @@
+// Doctor-wise consultation fee. Run on db:reset:demo.
+const B='http://localhost:4000/api';const call=async(t,m,p,b)=>{const r=await fetch(B+p,{method:m,headers:{'content-type':'application/json',authorization:'Bearer '+t},body:b?JSON.stringify(b):undefined});let d;try{d=await r.json()}catch{d=null}return{s:r.status,d}};
+const out=[];const ck=(n,c,x)=>out.push((c?'PASS ':'FAIL ')+n+(c?'':' '+String(JSON.stringify(x)).slice(0,200)));
+(async()=>{const L=async u=>(await (await fetch(B+'/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:u,password:'Demo@12345'})})).json()).token;
+const adm=await L('admin'),rec=await L('reception');
+const users=(await call(adm,'GET','/r/users?limit=200')).d.rows;const ravi=users.find(u=>u.username==='drravi'),sara=users.find(u=>u.username==='drsara');
+const pats=(await call(adm,'GET','/r/patients?limit=30')).d.rows;
+const est=async(doc,vt)=>(await call(rec,'GET',`/visits/price-preview?doctor_id=${doc.id}&visit_type=${vt}&payer_type=Cash`)).d;
+const base=await est(ravi,'OPD');
+ck('estimate works without doctor fee',base.price>0,base);
+ck('receptionist cannot create fees',(await call(rec,'POST','/r/doctor_fees',{doctor_id:ravi.id,visit_type:'Any',fee:999})).s===403);
+const f1=await call(adm,'POST','/r/doctor_fees',{doctor_id:ravi.id,visit_type:'Any',fee:250});ck('fee created',f1.s===201,f1);
+const f2=await call(adm,'POST','/r/doctor_fees',{doctor_id:ravi.id,visit_type:'Follow-up',fee:100});
+const e1=await est(ravi,'OPD');ck('OPD uses doctor fee 250',e1.price===250&&e1.price_basis==="Doctor's fee",e1);
+const e2=await est(ravi,'Follow-up');ck('Follow-up uses specific fee 100',e2.price===100,e2);
+const e3=await est(sara,'OPD');ck('other doctor unchanged',e3.price===base.price||e3.price>0&&e3.price_basis!=="Doctor's fee",e3);
+const v=await call(rec,'POST','/visits/start',{patient_id:pats[0].id,doctor_id:ravi.id,visit_type:'OPD',payer_type:'Cash'});ck('visit started',v.s===201||v.s===200,v);
+const bill=(await call(rec,'GET','/billing/visit/'+v.d.id)).d;const ch=bill.pending.find(c=>c.source==='Consultation');
+ck('consultation charge = 250',ch&&Number(ch.amount)===250,ch);
+const mv=await call(rec,'POST',`/visits/${v.d.id}/change-doctor`,{doctor_id:sara.id,reason:'test'});
+const bill2=(await call(rec,'GET','/billing/visit/'+v.d.id)).d;const ch2=bill2.pending.find(c=>c.source==='Consultation');
+ck('after doctor change fee follows new doctor',mv.s===200&&ch2&&Number(ch2.amount)!==250,{mv:mv.s,ch2});
+await call(adm,'PUT','/r/doctor_fees/'+f1.d.id,{...f1.d,active:false});
+ck('inactive fee ignored',(await est(ravi,'OPD')).price===base.price);
+console.log(out.join('\n'));process.exit(out.some(x=>x.startsWith('FAIL'))?1:0)})();
