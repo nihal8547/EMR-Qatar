@@ -86,6 +86,56 @@ router.get('/billing/invoices/:id', need('invoices.view'), wrap(async (req, res)
   res.json(await invoiceBundle(Number(req.params.id)));
 }));
 
+/** Remove a test / study / procedure the patient does not want. Cancels the order too, if it has not started. */
+router.post('/billing/charges/:id/remove', need('billing.cashier'), wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const reason = String(req.body?.reason || '').trim();
+  if (reason.length < 3) throw bad('A reason is required');
+  const out = await db.tx(async (client) => {
+    const c = (await client.query(`SELECT * FROM "billing"."charges" WHERE id=$1 AND is_deleted=false FOR UPDATE`, [id])).rows[0];
+    if (!c) throw notFound('Charge not found');
+    if (c.status === 'Cancelled') throw conflict('Already removed');
+    let inv = null;
+    if (c.status === 'Invoiced') {
+      inv = (await client.query(`SELECT * FROM "billing"."invoices" WHERE id=$1`, [c.invoice_id])).rows[0];
+      if (!inv || inv.status === 'Cancelled') throw conflict('The invoice is cancelled');
+      if (Number(inv.paid) > 0.005) throw conflict('This bill already has a payment. Use "Request bill cancel" (refund) instead.');
+      if (inv.payer_type !== 'Cash' && (await client.query(`SELECT 1 FROM "insurance"."claims" WHERE invoice_id=$1 AND is_deleted=false LIMIT 1`, [inv.id])).rows.length) throw conflict('A claim exists for this invoice');
+    }
+    if (c.source === 'Lab') {
+      const it = (await client.query(`SELECT i.id, i.order_id, i.status, o.status AS ostatus FROM "lab"."lab_order_items" i JOIN "lab"."lab_orders" o ON o.id=i.order_id WHERE i.id=$1`, [c.source_id])).rows[0];
+      if (it) {
+        if (it.ostatus !== 'Ordered' || it.status !== 'Pending') throw conflict('The sample is already collected / tested, so this test cannot be removed here');
+        await client.query(`UPDATE "lab"."lab_order_items" SET is_deleted=true, updated_at=now() WHERE id=$1`, [it.id]);
+        const left = (await client.query(`SELECT COUNT(*)::int n FROM "lab"."lab_order_items" WHERE order_id=$1 AND is_deleted=false`, [it.order_id])).rows[0].n;
+        if (!left) await client.query(`UPDATE "lab"."lab_orders" SET status='Cancelled', updated_at=now() WHERE id=$1`, [it.order_id]);
+      }
+    } else if (c.source === 'Radiology') {
+      const o = (await client.query(`SELECT status FROM "radiology"."imaging_orders" WHERE id=$1`, [c.source_id])).rows[0];
+      if (o) {
+        if (o.status !== 'Ordered') throw conflict('The study has already started, so it cannot be removed here');
+        await client.query(`UPDATE "radiology"."imaging_orders" SET is_deleted=true, updated_at=now() WHERE id=$1`, [c.source_id]);
+      }
+    } else if (c.source === 'Procedure') {
+      const o = (await client.query(`SELECT status FROM "clinical"."procedure_orders" WHERE id=$1`, [c.source_id])).rows[0];
+      if (o) {
+        if (o.status !== 'Ordered') throw conflict('The procedure is already done');
+        await client.query(`UPDATE "clinical"."procedure_orders" SET status='Cancelled', updated_at=now() WHERE id=$1`, [c.source_id]);
+      }
+    } else if (c.source !== 'Manual') throw conflict(`${c.source} items cannot be removed here`);
+    await client.query(`UPDATE "billing"."charges" SET status='Cancelled', updated_at=now() WHERE id=$1`, [id]);
+    await audit(client, req.user, 'CHARGE_REMOVE', 'charges', id, { reason, source: c.source, description: c.description, amount: c.amount, invoice_id: c.invoice_id }, req.ip);
+    if (inv) {
+      const left = (await client.query(`SELECT COUNT(*)::int n FROM "billing"."charges" WHERE invoice_id=$1 AND is_deleted=false AND status <> 'Cancelled'`, [inv.id])).rows[0].n;
+      if (!left) await client.query(`UPDATE "billing"."invoices" SET status='Cancelled', notes=COALESCE(notes||' · ','')||$2, updated_at=now() WHERE id=$1`, [inv.id, `All items removed: ${reason}`]);
+      else await billing.createOrRefreshInvoice(client, req.user, c.visit_id, {});
+    }
+    await billing.settleVisit(client, c.visit_id);
+    return { visit_id: c.visit_id };
+  });
+  res.json({ ok: true, ...out });
+}));
+
 router.post('/billing/invoices/:id/pay', need('billing.cashier'), wrap(async (req, res) => {
   const out = await db.tx(async (client) => {
     const r = await billing.payInvoice(client, req.user, Number(req.params.id), req.body);

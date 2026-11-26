@@ -11,13 +11,22 @@ const chip = ref('all')
 const CHIPS: [string, string][] = [['all', 'All'], ['due', 'Has dues'], ['Lab', 'Lab tests'], ['Radiology', 'X-ray / Imaging'], ['Consultation', 'Consultation'], ['Procedure', 'Procedures'], ['Pharmacy', 'Pharmacy']]
 const shown = computed(() => list.value.filter((v: any) => chip.value === 'all' ? true : chip.value === 'due' ? (Number(v.pending_amount) > 0 || Number(v.balance) > 0) : String(v.sources || '').split(',').includes(chip.value)))
 const bySource = computed(() => { const o: Record<string, number> = {}; for (const c of d.value?.pending || []) o[c.source] = (o[c.source] || 0) + Number(c.amount); return o })
-const qm = ref('Cash')
+const REMOVABLE = ['Lab', 'Radiology', 'Procedure', 'Manual']
+async function removeItem(c: any) {
+  const reason = prompt(`Remove "${c.description}" from this bill?\nThe ${c.source === 'Manual' ? 'charge' : 'test / order'} is cancelled too, if not started.\n\nReason (e.g. patient declined):`); if (!reason) return
+  if (await run(() => api(`/billing/charges/${c.id}/remove`, { method: 'POST', body: { reason } }), 'Item removed')) { await Promise.all([loadVisit(), loadList()]) }
+}
+const items = computed(() => [
+  ...(d.value?.invoice?.lines || []).map((l: any) => ({ ...l, billed: true })),
+  ...(d.value?.pending || []).map((c: any) => ({ ...c, billed: false })),
+])
+const canRemove = (c: any) => REMOVABLE.includes(c.source) && !(c.billed && Number(inv.value?.paid) > 0.005) && inv.value?.status !== 'Cancelled'
 async function quickCollect() {
   busy.value = true
   try {
     const b: any = await api(`/billing/visit/${sel.value}/invoice`, { method: 'POST', body: discTouched.value ? { discount_pct: disc.value || 0 } : {} })
     const due = Number(b.invoice.balance)
-    if (due > 0) await api(`/billing/invoices/${b.invoice.id}/pay`, { method: 'POST', body: { amount: due, method: qm.value, reference: pay.reference } })
+    if (due > 0) await api(`/billing/invoices/${b.invoice.id}/pay`, { method: 'POST', body: { amount: due, method: pay.method, reference: pay.reference } })
     ok(due > 0 ? `Received ${money(due)}` : 'Invoice saved — nothing to pay'); pay.reference = ''
     await Promise.all([loadVisit(), loadList(), loadSess()])
   } catch (e) { err(e) } finally { busy.value = false }
@@ -84,11 +93,6 @@ async function closeSession() {
           <span v-if="d.deposit_balance > 0" class="badge blue">Deposit {{ money(d.deposit_balance) }}</span><span class="badge" :class="badgeClass(d.visit.status)">{{ d.visit.status }}</span></div>
           <div v-if="d.visit.payer_type === 'Insurance' && d.visit.eligibility_status !== 'Eligible'" class="alert warn" style="margin-top:8px">Eligibility: {{ d.visit.eligibility_status }}</div>
           <div v-for="p in d.preauths" :key="p.auth_no" class="small">Pre-auth {{ p.auth_no }} · {{ p.name }} · <span class="badge" :class="badgeClass(p.status)">{{ p.status }}</span></div></div>
-        <div v-if="d.pending.length" class="card"><h2>Unbilled charges</h2>
-          <div class="bar" style="gap:6px"><span v-for="(a, s) in bySource" :key="s" class="badge">{{ s }} {{ money(a) }}</span></div>
-          <div  class="bar" style="background:#fafbfc;padding:8px;border-radius:8px"><b>Bill &amp; collect now</b><select v-model="qm" style="width:130px"><option>Cash</option><option>Card</option><option>Bank transfer</option><option v-if="d.deposit_balance > 0">Deposit</option><option>Online</option></select><input v-model="pay.reference" placeholder="Reference (card slip)" style="width:170px" /><button class="ok" :disabled="busy" @click="quickCollect">Create invoice &amp; receive payment</button><span class="small muted">patient share is collected after discount / insurance</span></div>
-          <table><thead><tr><th>Item</th><th>Source</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th></tr></thead><tbody><tr v-for="c in d.pending" :key="c.id"><td>{{ c.description }} <span v-if="!c.covered && d.visit.payer_type === 'Insurance'" class="badge amber">not covered</span></td><td>{{ c.source }}</td><td class="num">{{ c.qty }}</td><td class="num">{{ money(c.unit_price) }}</td><td class="num">{{ money(c.amount) }}</td></tr>
-            <tr><td colspan="4" class="right"><b>Total</b></td><td class="num"><b>{{ money(pendTotal) }}</b></td></tr></tbody></table></div>
         <div v-if="d.checkin_discount" class="alert" :class="d.checkin_discount.status === 'Applied' ? 'ok' : 'warn'">
           Check-in discount: <b>{{ d.checkin_discount.type === 'percent' ? d.checkin_discount.value + '%' : 'QAR ' + d.checkin_discount.value }}</b> — {{ d.checkin_discount.reason }}
           <span class="badge" :class="d.checkin_discount.status === 'Applied' ? 'green' : d.checkin_discount.status === 'Rejected' ? 'red' : 'amber'">{{ d.checkin_discount.status }}</span>
@@ -101,21 +105,45 @@ async function closeSession() {
           <span v-if="can('bill_cancel_requests.approve')"> <button class="sm ok" :disabled="busy" @click="decideCancel(true)">Approve</button> <button class="sm danger" :disabled="busy" @click="decideCancel(false)">Reject</button></span>
           <span v-else class="small"> · waiting for a cashier / manager to approve.</span></div>
         <div class="card">
-          <div class="bar"><h2 style="margin:0">Invoice <span v-if="inv">{{ inv.invoice_no }}</span></h2><div class="sp"></div><span v-if="inv" class="badge" :class="badgeClass(inv.status)">{{ inv.status }}</span>
+          <div class="bar"><h2 style="margin:0">Bill items <span class="cnt-pill">{{ items.length }}</span></h2><div class="sp"></div>
+            <span v-if="inv" class="muted small">Invoice {{ inv.invoice_no }}</span><span v-if="inv" class="badge" :class="badgeClass(inv.status)">{{ inv.status }}</span>
             <NuxtLink v-if="inv" :to="`/print/invoice/${inv.id}`" class="btn sm">🖨 Print</NuxtLink></div>
-          <div class="bar"><label class="small muted">Discount %</label><input type="number" min="0" max="100" step="any" v-model.number="disc" style="width:90px" @input="discTouched = true" :disabled="!can('billing.discount') && !can('billing.approve_discount')" /><span v-if="!can('billing.discount') && !can('billing.approve_discount')" class="small muted">no discount rights</span>
-            <button class="p" :disabled="busy || (!d.pending.length && !inv)" @click="makeInvoice">{{ inv ? 'Add new charges / refresh invoice' : 'Create invoice' }}</button>
-            <button v-if="inv && inv.status !== 'Cancelled' && !d.invoice.cancel_request && can('bill_cancel_requests.create') && !can('billing.approve_discount')" :disabled="busy" @click="requestCancel">Request bill cancel</button>
-            <button v-if="inv && can('billing.approve_discount') && Number(inv.paid) === 0 && inv.status !== 'Cancelled'" class="danger" @click="cancelInvoice">Cancel invoice</button></div>
-          <template v-if="inv">
-            <table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Amount</th></tr></thead><tbody><tr v-for="l in d.invoice.lines" :key="l.id"><td>{{ l.description }}</td><td class="num">{{ l.qty }}</td><td class="num">{{ money(l.amount) }}</td></tr></tbody></table>
-            <dl class="kv" style="margin-top:10px"><dt>Gross</dt><dd>{{ money(inv.gross) }}</dd><dt>Discount</dt><dd>{{ money(inv.discount) }}</dd><dt>Net</dt><dd><b>{{ money(inv.net) }}</b></dd>
-              <template v-if="inv.payer_type !== 'Cash'"><dt>Payer share</dt><dd>{{ money(inv.payer_share) }} <span class="muted small">({{ d.invoice.invoice.payer_name || d.invoice.invoice.corporate_name }})</span></dd></template><dt>Patient share</dt><dd><b>{{ money(inv.patient_share) }}</b></dd><dt>Paid</dt><dd>{{ money(inv.paid) }}</dd><dt>Balance due</dt><dd><b :style="{ color: Number(inv.balance) > 0 ? 'var(--bad)' : 'var(--ok)' }">{{ money(inv.balance) }}</b></dd></dl>
-            <div v-if="d.invoice.payments.length"><h3>Payments</h3><table><tbody><tr v-for="p in d.invoice.payments" :key="p.id"><td>{{ p.receipt_no }}</td><td>{{ fdt(p.paid_at) }}</td><td>{{ p.method }} <span class="muted small">{{ p.reference }}</span></td><td>{{ p.cashier }}</td><td class="num">{{ p.kind === 'Refund' ? '-' : '' }}{{ money(p.amount) }}</td></tr></tbody></table></div>
-            <div v-if="Number(inv.balance) > 0 && inv.status !== 'Cancelled'" class="card" style="background:#fafbfc;margin-top:10px"><h3>Take payment</h3>
-              <div class="fgrid"><div class="field"><label class="f">Amount</label><input type="number" step="any" v-model.number="pay.amount" /></div><div class="field"><label class="f">Method</label><select v-model="pay.method"><option>Cash</option><option>Card</option><option>Bank transfer</option><option v-if="d.deposit_balance > 0">Deposit</option><option>Online</option></select></div><div class="field"><label class="f">Reference (card slip / transfer)</label><input v-model="pay.reference" /></div></div>
-              <button class="ok" :disabled="busy || !pay.amount" @click="takePayment">Receive {{ money(pay.amount) }}</button></div>
+          <div v-if="!items.length" class="none-txt">No charges for this visit yet.</div>
+          <table v-else class="bill"><thead><tr><th style="width:34px">#</th><th>Item</th><th>Source</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th><th style="width:34px" class="no-print"></th></tr></thead>
+            <tbody><tr v-for="(c, i) in items" :key="(c.billed ? 'i' : 'p') + c.id"><td class="muted">{{ i + 1 }}</td>
+              <td>{{ c.description }} <span v-if="!c.billed" class="badge amber">unbilled</span><span v-if="c.covered === false && d.visit.payer_type === 'Insurance'" class="badge amber">not covered</span></td>
+              <td class="muted">{{ c.source }}</td><td class="num">{{ c.qty }}</td><td class="num">{{ money(c.unit_price) }}</td><td class="num">{{ money(c.amount) }}</td>
+              <td class="no-print"><button v-if="canRemove(c)" class="sm danger rm" :disabled="busy" title="Remove this item (patient declined / not needed)" @click="removeItem(c)">✕</button></td></tr></tbody></table>
+          <div v-if="items.length" class="bill-foot">
+            <div class="bill-ctl">
+              <div class="bar" style="margin:0"><label class="small muted">Discount %</label><input type="number" min="0" max="100" step="any" v-model.number="disc" style="width:90px" @input="discTouched = true" :disabled="!can('billing.discount') && !can('billing.approve_discount')" /><span v-if="!can('billing.discount') && !can('billing.approve_discount')" class="small muted">no discount rights</span></div>
+              <div class="bar" style="margin:8px 0 0"><button class="p" :disabled="busy || (!d.pending.length && !inv)" @click="makeInvoice">{{ inv ? 'Add new charges / refresh invoice' : 'Create invoice' }}</button>
+                <button v-if="inv && inv.status !== 'Cancelled' && !d.invoice.cancel_request && can('bill_cancel_requests.create') && !can('billing.approve_discount')" :disabled="busy" @click="requestCancel">Request bill cancel</button>
+                <button v-if="inv && can('billing.approve_discount') && Number(inv.paid) === 0 && inv.status !== 'Cancelled'" class="danger" @click="cancelInvoice">Cancel invoice</button></div>
+            </div>
+            <dl class="totals">
+              <template v-if="inv"><dt>Gross</dt><dd>{{ money(inv.gross) }}</dd><dt>Discount</dt><dd>− {{ money(inv.discount) }}</dd><dt class="strong">Net total</dt><dd class="strong">{{ money(inv.net) }}</dd>
+                <template v-if="inv.payer_type !== 'Cash'"><dt>Insurer / company</dt><dd>{{ money(inv.payer_share) }}</dd></template>
+                <dt class="strong">Patient share</dt><dd class="strong">{{ money(inv.patient_share) }}</dd></template>
+              <template v-if="d.pending.length"><dt>Unbilled items</dt><dd>{{ money(pendTotal) }}</dd></template>
+            </dl>
+          </div>
+        </div>
+        <div class="card pay-card">
+          <h2>Payment</h2>
+          <div v-if="d.invoice?.payments.length" style="margin-bottom:10px"><table><thead><tr><th>Receipt</th><th>Date</th><th>Method</th><th>Cashier</th><th class="num">Amount</th></tr></thead><tbody><tr v-for="p in d.invoice.payments" :key="p.id"><td>{{ p.receipt_no }}</td><td>{{ fdt(p.paid_at) }}</td><td>{{ p.method }} <span class="muted small">{{ p.reference }}</span></td><td>{{ p.cashier }}</td><td class="num">{{ p.kind === 'Refund' ? '-' : '' }}{{ money(p.amount) }}</td></tr></tbody></table></div>
+          <div v-if="inv" class="paysum"><div><span class="k">Patient share</span><b>{{ money(inv.patient_share) }}</b></div><div><span class="k">Paid</span><b>{{ money(inv.paid) }}</b></div><div><span class="k">Balance due</span><b :style="{ color: Number(inv.balance) > 0 ? 'var(--bad)' : 'var(--ok)' }">{{ money(inv.balance) }}</b></div></div>
+          <template v-if="d.pending.length || (inv && Number(inv.balance) > 0 && inv.status !== 'Cancelled')">
+            <div class="fgrid" style="margin-top:12px"><div class="field"><label class="f">Method</label><select v-model="pay.method"><option>Cash</option><option>Card</option><option>Bank transfer</option><option v-if="d.deposit_balance > 0">Deposit</option><option>Online</option></select></div>
+              <div class="field"><label class="f">Reference (card slip / transfer)</label><input v-model="pay.reference" /></div>
+              <div v-if="!d.pending.length" class="field"><label class="f">Amount</label><input type="number" step="any" v-model.number="pay.amount" /></div></div>
+            <div class="bar" style="margin-top:6px">
+              <button v-if="d.pending.length" class="ok" :disabled="busy" @click="quickCollect">Create invoice &amp; receive payment</button>
+              <button v-else class="ok" :disabled="busy || !pay.amount" @click="takePayment">Receive {{ money(pay.amount) }}</button>
+              <span v-if="d.pending.length" class="small muted">The patient's share (after discount / insurance) is collected in full.</span></div>
           </template>
+          <div v-else-if="inv && inv.status === 'Paid'" class="alert ok" style="margin:10px 0 0">Fully paid.</div>
+          <div v-else-if="!inv" class="none-txt">Nothing to collect.</div>
         </div>
       </div>
       <div v-else class="card empty">Select a visit to bill.</div>

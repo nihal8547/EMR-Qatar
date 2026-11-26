@@ -167,3 +167,11 @@ tr.click:hover td{background:#f7f7f7}
 .hv-b{padding:4px 18px 18px;border-top:1px solid #f0f0f0}.hv-b table{margin-top:4px}
 .hv-b .small{margin:3px 0}
 @media print{.hv-b{display:block!important}.hv{break-inside:avoid-page;box-shadow:none}}
+.cnt-pill{font-size:11px;background:#f1f1f1;color:#525252;border-radius:99px;padding:1px 8px;font-weight:600;vertical-align:middle}
+table.bill td,table.bill th{padding:9px 10px}
+button.rm{padding:2px 8px;line-height:1.2}
+.bill-foot{display:flex;gap:24px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px dashed #d4d4d4}
+.totals{display:grid;grid-template-columns:auto auto;gap:5px 28px;margin:0 0 0 auto;min-width:260px}.totals dt{color:var(--muted);font-size:13px}.totals dd{margin:0;text-align:right}
+.totals .strong{font-weight:650;color:var(--ink);font-size:14.5px;padding-top:4px;border-top:1px solid #eee}
+.paysum{display:flex;gap:12px;flex-wrap:wrap}.paysum>div{flex:1;min-width:130px;background:#f7f7f7;border:1px solid var(--line);border-radius:10px;padding:10px 14px}.paysum .k{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:2px}.paysum b{font-size:19px}
+.pay-card{border:1.5px solid #111}
