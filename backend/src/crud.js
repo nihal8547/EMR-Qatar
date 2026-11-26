@@ -477,4 +477,4 @@ router.post('/r/:key/:id/action/:name', wrap(async (req, res) => {
   res.json({ ok: true, ...(out || {}), record: await fetchOne(db, r, id) });
 }));
 
-module.exports = { router, fetchOne, selectSQL, list, fq, q, getRes, dispExpr, assertPatientAccess };
+module.exports = { router, fetchOne, selectSQL, list, fq, q, getRes, dispExpr, assertPatientAccess, relationSQL };

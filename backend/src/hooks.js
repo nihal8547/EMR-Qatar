@@ -83,6 +83,42 @@ const H = {
   },
 
 
+  /* ----- paediatrics ----- */
+  async immunizationBefore(ctx) {
+    const d = ctx.data; const m = { ...(ctx.existing || {}), ...d };
+    if (ctx.mode === 'create') d.recorded_by = ctx.user.id;
+    if (ctx.mode === 'update' && d.patient_id !== undefined && String(d.patient_id) !== String(ctx.existing.patient_id)) throw bad('Patient cannot be changed on a vaccine record');
+    if (!Number.isInteger(Number(m.dose_no)) || Number(m.dose_no) < 1 || Number(m.dose_no) > 20) throw bad('Dose number must be between 1 and 20');
+    const given = String(m.given_on || '').slice(0, 10);
+    if (given > new Date().toISOString().slice(0, 10)) throw bad('The date cannot be in the future');
+    const p = (await ctx.client.query(`SELECT dob FROM "mpi"."patients" WHERE id=$1 AND is_deleted=false`, [m.patient_id])).rows[0];
+    if (!p) throw bad('Patient not found');
+    if (p.dob && given < new Date(p.dob).toISOString().slice(0, 10)) throw bad('The vaccine date is before the date of birth');
+    if (m.expiry_date && m.status === 'Given' && m.source === 'This centre' && String(m.expiry_date).slice(0, 10) < given) throw bad('This vaccine batch had expired on the given date');
+    if (m.status === 'Given') {
+      const dup = await ctx.client.query(`SELECT id FROM "clinical"."immunizations" WHERE patient_id=$1 AND vaccine_id=$2 AND dose_no=$3 AND status='Given' AND is_deleted=false AND id <> $4`, [m.patient_id, m.vaccine_id, m.dose_no, ctx.existing ? ctx.existing.id : 0]);
+      if (dup.rows.length) throw conflict('This dose is already recorded as given for this patient');
+    }
+    if (d.visit_id) {
+      const v = (await ctx.client.query(`SELECT patient_id FROM "scheduling"."visits" WHERE id=$1 AND is_deleted=false`, [d.visit_id])).rows[0];
+      if (!v) throw bad('Visit not found');
+      if (String(v.patient_id) !== String(m.patient_id)) throw bad('That visit belongs to a different patient');
+    }
+  },
+  async growthBefore(ctx) {
+    const d = ctx.data; const m = { ...(ctx.existing || {}), ...d };
+    if (ctx.mode === 'create') d.recorded_by = ctx.user.id;
+    if (ctx.mode === 'update' && d.patient_id !== undefined && String(d.patient_id) !== String(ctx.existing.patient_id)) throw bad('Patient cannot be changed on a measurement');
+    const w = m.weight_kg === null || m.weight_kg === undefined || m.weight_kg === '' ? null : Number(m.weight_kg);
+    const h = m.height_cm === null || m.height_cm === undefined || m.height_cm === '' ? null : Number(m.height_cm);
+    const c = m.head_circ_cm === null || m.head_circ_cm === undefined || m.head_circ_cm === '' ? null : Number(m.head_circ_cm);
+    if (w === null && h === null && c === null) throw bad('Enter at least one measurement');
+    if (w !== null && !(w > 0.3 && w < 300)) throw bad('Weight must be between 0.3 and 300 kg');
+    if (h !== null && !(h > 20 && h < 250)) throw bad('Length / height must be between 20 and 250 cm');
+    if (c !== null && !(c > 15 && c < 80)) throw bad('Head circumference must be between 15 and 80 cm');
+    if (String(m.measured_on || '').slice(0, 10) > new Date().toISOString().slice(0, 10)) throw bad('The date cannot be in the future');
+  },
+
   /* ----- dental ----- */
   async dentalEntryBefore(ctx) {
     const d = ctx.data; const m = { ...(ctx.existing || {}), ...d };

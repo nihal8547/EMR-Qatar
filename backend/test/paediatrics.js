@@ -1,0 +1,22 @@
+// Vaccination + growth checks. Run on a fresh `npm run db:reset:demo`.
+const B='http://localhost:4000/api';const call=async(t,m,p,b)=>{const r=await fetch(B+p,{method:m,headers:{'content-type':'application/json',authorization:'Bearer '+t},body:b?JSON.stringify(b):undefined});let d;try{d=await r.json()}catch{d=null}return{s:r.status,d}};
+const out=[];const ck=(n,c,x)=>out.push((c?'PASS ':'FAIL ')+n+(c?'':' '+String(JSON.stringify(x)).slice(0,200)));
+(async()=>{const L=async u=>(await (await fetch(B+'/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:u,password:'Demo@12345'})})).json()).token;
+const adm=await L('admin'),nurse=await L('nurse');
+const pts=(await call(adm,'GET','/r/patients?q=Yusuf&limit=5')).d.rows;const kid=pts.find(p=>/Yusuf/.test(p.full_name||p.first_name||''))||pts[0];
+const v=await call(adm,'GET','/vaccination/'+kid.id);
+ck('vaccination record loads',v.s===200&&v.d.rows.length>10,v);
+ck('summary has given/overdue',v.d.summary.given>=8&&v.d.summary.overdue>=1,v.d.summary);
+ck('due list returns children',(await call(adm,'GET','/vaccination-due')).d.rows?.length>0);
+const vac=(await call(adm,'GET','/r/vaccines?limit=200')).d.rows;const bcg=vac.find(x=>x.code==='BCG');
+const dup=await call(adm,'POST','/r/immunizations',{patient_id:kid.id,vaccine_id:bcg.id,dose_no:1,status:'Given',given_on:'2026-04-26',source:'This centre'});
+ck('duplicate Given dose rejected 409',dup.s===409,dup);
+ck('dose before DOB rejected',(await call(adm,'POST','/r/immunizations',{patient_id:kid.id,vaccine_id:bcg.id,dose_no:9,status:'Given',given_on:'2000-01-01',source:'Outside'})).s===400);
+ck('future date rejected',(await call(adm,'POST','/r/immunizations',{patient_id:kid.id,vaccine_id:bcg.id,dose_no:9,status:'Given',given_on:'2099-01-01',source:'Outside'})).s===400);
+const g=await call(adm,'GET','/growth/'+kid.id);
+ck('growth points + curves',g.s===200&&g.d.points.length>=3&&Object.keys(g.d.indicators).length===4&&Object.values(g.d.indicators).every(i=>i.curves),g.s);
+const z=g.d.points[g.d.points.length-1].z.wfa;ck('z-score sane (|z|<1 for demo child)',Math.abs(z)<1,z);
+ck('empty measurement rejected',(await call(adm,'POST','/r/growth_measurements',{patient_id:kid.id,measured_on:'2026-10-01'})).s===400);
+ck('absurd weight rejected',(await call(adm,'POST','/r/growth_measurements',{patient_id:kid.id,measured_on:'2026-10-01',weight_kg:900})).s===400);
+const n=await call(nurse,'GET','/vaccination/'+kid.id);ck('nurse without care relationship blocked',n.s===403,n.s);
+console.log(out.join('\n'));process.exit(out.some(x=>x.startsWith('FAIL'))?1:0)})();

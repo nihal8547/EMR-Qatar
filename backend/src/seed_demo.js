@@ -121,9 +121,31 @@ async function workflows() {
     await must('dental entry', 'drdental', 'POST', '/r/dental_chart_entries', { patient_id: moh.id, visit_id: dv.id, dentition: 'Permanent', tooth_no: '47', surface: 'O', condition: 'Caries', notes: 'Early lesion, monitor' });
   }
   // second dental patient with a child chart
+  await must('dental visit 2', 'reception', 'POST', '/visits/start', { patient_id: pat[4], doctor_id: dent.id, payer_type: 'Cash', complaint: 'Dental check - child' });
   await must('dental plan 2', 'drdental', 'POST', '/r/dental_treatment_plans', { patient_id: pat[4], plan_date: day(0), status: 'Proposed', notes: 'Primary teeth sealants' });
   await must('dental entry p', 'drdental', 'POST', '/r/dental_chart_entries', { patient_id: pat[4], dentition: 'Primary', tooth_no: '54', surface: 'O', condition: 'Caries', notes: 'Child - seen with Dr. Layla' });
   await must('dental entry p2', 'drdental', 'POST', '/r/dental_chart_entries', { patient_id: pat[4], dentition: 'Primary', tooth_no: '65', surface: 'Whole tooth', condition: 'Sealant' });
+  // paediatrics: two children with partly complete vaccination records and growth measurements
+  const addDays = (d, n) => new Date(d.getTime() + n * 86400000).toISOString().slice(0, 10);
+  const vacc = (await rows('admin', 'vaccines'));
+  const vid = (code) => vacc.find((v) => v.code === code)?.id;
+  const kids = [['Yusuf Al-Kuwari', 'Male', 215, '+974 5501 2101', 'B+'], ['Noora Ahmed', 'Female', 640, '+974 5501 2102', 'A+']];
+  for (const [i, [full_name, gender, ageDays, phone, blood_group]] of kids.entries()) {
+    const dob = addDays(new Date(), -ageDays);
+    const k = await must(`child ${full_name}`, 'reception', 'POST', '/r/patients', { full_name, gender, dob, phone, blood_group, qid: `2${String(7500000000 + i * 1777).padStart(10, '0')}`, nationality_id: nat?.id, language: 'English', address: 'Doha' });
+    if (!k) continue;
+    const dobD = new Date(dob);
+    const doses = [['BCG', 1, 0], ['HEPB', 1, 0], ['HEXA', 1, 61], ['ROTA', 1, 61], ['PCV', 1, 61], ['HEXA', 2, 122], ['ROTA', 2, 122], ['PCV', 2, 122]];
+    if (ageDays > 400) doses.push(['OPV', 1, 185], ['PENTA', 1, 185], ['PCV', 3, 185]);
+    for (const [code, dose, at] of doses) if (at <= ageDays - 3 && vid(code)) await must(`vaccine ${code}`, 'admin', 'POST', '/r/immunizations', { patient_id: k.id, vaccine_id: vid(code), dose_no: dose, status: 'Given', given_on: addDays(dobD, at), source: 'This centre', batch_no: `B${code}${dose}24`, expiry_date: addDays(new Date(), 400), site: code === 'ROTA' || code === 'OPV' ? 'Oral' : 'Left thigh' });
+    const GR = require('./growth'); const sx = GR.sexKey(gender);
+    // realistic measurements: close to the WHO median; the second child drifts down to about -2.2 SD weight after 12 months
+    for (const at of [0, 61, 122, 185, 365, 540].filter((a) => a <= ageDays - 3)) {
+      const m = at / 30.4375; const dz = i === 1 && at > 300 ? -2.3 : -0.3 + (i * 0.4);
+      const at1 = (ind, z) => Math.round(GR.valueAtZ(GR.lms(ind, sx, m), z) * 10) / 10;
+      await must('growth', 'admin', 'POST', '/r/growth_measurements', { patient_id: k.id, measured_on: addDays(dobD, at), weight_kg: at1('wfa', dz), height_cm: at1('lhfa', dz * 0.6), head_circ_cm: at1('hcfa', -0.2 + i * 0.3), source: 'This centre' });
+    }
+  }
   await must('OTC', 'pharmacist', 'POST', '/pharmacy/otc', { items: [{ drug_id: dr('PARA500').id, qty: 2 }], customer_name: 'Walk-in customer', payment_method: 'Cash' });
   await must('session close', 'cashier', 'POST', '/billing/session/close', { closing_cash: 0 }).catch(() => {});
 }

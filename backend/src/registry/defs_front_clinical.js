@@ -141,6 +141,7 @@ module.exports = (R) => {
     'spo2:int:SpO2 %',
     'weight_kg:decimal:Weight (kg)',
     'height_cm:decimal:Height (cm)',
+    'head_circ_cm:decimal:Head circumference (cm)',
     'pain_score:int:Pain (0-10)',
     'triage_level:select=1 - Resuscitation/2 - Emergent/3 - Urgent/4 - Less urgent/5 - Non-urgent:Triage level:list',
     'notes:text',

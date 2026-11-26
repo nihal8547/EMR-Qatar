@@ -52,14 +52,14 @@ const ROLES = [
     name: 'Receptionist', description: 'Registration, appointments, check-in', restrict: false, discount: 5,
     perms: [
       'dashboard.view', 'notify.send', 'visits.start', 'visits.manage', 'walkin.create', 'billing.cashier', 'billing.discount', 'invoices:v', 'payments:v', 'bill_cancel_requests:vc', 'queue.view', 'patients:vce', 'patient_family:vced', 'patient_allergies:v', 'patient_documents:vce', 'consents:vce',
-      'appointments:vced', 'doctor_schedules:v', 'visits:ve', 'policy_members:vce', 'payers:v', 'plans:v', 'eligibility_checks:v', 'corporate_accounts:v', 'users:v', ...LOOKUPS,
+      'appointments:vced', 'doctor_schedules:v', 'vaccines:v', 'vaccine_schedule:v', 'immunizations:v', 'visits:ve', 'policy_members:vce', 'payers:v', 'plans:v', 'eligibility_checks:v', 'corporate_accounts:v', 'users:v', ...LOOKUPS,
     ],
   },
   {
     name: 'Nurse', description: 'Triage, vitals, nursing notes', restrict: true, discount: 0,
     perms: [
       'dashboard.view', 'queue.view', 'patients:v', 'patient_allergies:vce', 'patient_family:v', 'visits:ve', 'vitals:vce', 'nursing_notes:vce', 'appointments:v',
-      'encounters:v', 'diagnoses:v', 'prescriptions:v', 'prescription_items:v', 'procedure_orders:vce', 'patients.360', 'dental.chart', 'dental_chart_entries:v', 'dental_treatment_plans:v', 'dental_plan_items:v', 'users:v', ...LOOKUPS,
+      'encounters:v', 'diagnoses:v', 'prescriptions:v', 'prescription_items:v', 'procedure_orders:vce', 'patients.360', 'dental.chart', 'dental_chart_entries:v', 'dental_treatment_plans:v', 'dental_plan_items:v', 'vaccines:v', 'vaccine_schedule:v', 'immunizations:vce', 'growth_measurements:vce', 'users:v', ...LOOKUPS,
     ],
   },
   {
@@ -69,7 +69,7 @@ const ROLES = [
       'appointments:v', 'visits:v', 'vitals:v', 'nursing_notes:v', 'encounters:vce', 'diagnoses:vced', 'diagnosis_codes:v', 'prescriptions:vce', 'prescription_items:vced',
       'procedure_orders:vced', 'certificates:vced', 'referrals:vced', 'lab_orders:v', 'lab_order_items:v', 'lab_tests:v', 'lab_panels:v', 'imaging_orders:v', 'imaging_reports:v',
       'drugs:v', 'drug_interactions:v', 'services:v', 'imaging_modalities:v', 'doctor_schedules:v', 'users:v', ...LOOKUPS,
-      'dental.chart', 'dental.complete', 'dental_chart_entries:vced', 'dental_treatment_plans:vce', 'dental_plan_items:vced',
+      'dental.chart', 'dental.complete', 'dental_chart_entries:vced', 'dental_treatment_plans:vce', 'dental_plan_items:vced', 'vaccines:v', 'vaccine_schedule:v', 'immunizations:vced', 'growth_measurements:vced',
     ],
   },
   {

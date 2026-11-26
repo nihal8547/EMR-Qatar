@@ -31,6 +31,8 @@ const CUSTOM_PAGES = [
   { module: 'front', label: 'Bill Cancel Requests', to: '/r/bill_cancel_requests', perm: 'bill_cancel_requests.view' },
   { module: 'front', label: 'Queue Board', to: '/queue', perm: 'queue.view' },
   { module: 'clinical', label: 'My Consultations', to: '/consult', perm: 'consult.use' },
+  { module: 'clinical', label: 'Vaccinations (Register & Due List)', to: '/vaccinations', perm: 'immunizations.view' },
+  { module: 'clinical', label: 'Growth Charts (WHO)', to: '/growth', perm: 'growth_measurements.view' },
   { module: 'dental', label: 'Dental Chart', to: '/dental-chart', perm: 'dental.chart' },
   { module: 'lab', label: 'Lab Worklist', to: '/lab-worklist', perm: 'lab.work' },
   { module: 'pharmacy', label: 'Dispensing Queue', to: '/pharmacy-queue', perm: 'pharmacy.dispense' },
@@ -134,6 +136,7 @@ function Alias(key, of, where, label) {
 require('./defs_admin')(R, Alias);
 require('./defs_front_clinical')(R, Alias);
 require('./defs_dental')(R, Alias);
+require('./defs_paediatrics')(R, Alias);
 require('./defs_diagnostics')(R, Alias);
 require('./defs_pharmacy_inventory')(R, Alias);
 require('./defs_billing_insurance')(R, Alias);

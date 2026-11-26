@@ -6,6 +6,9 @@ One registry file set (`backend/src/registry/`) drives the tables, the REST API,
 ## Sample data
 `npm run db:reset` loads masters, roles and a few demo patients (this is the state the automated tests expect). `npm run db:reset:demo` (or `npm run db:demo` on top of it) also loads a full working set: about 14 patients with visits, vitals, lab results, imaging reports, prescriptions, dispensing (including a controlled drug with witness), invoices, payments, a submitted claim, dental charts, and at least 3 rows on every page. It is created through the real API, so every record follows the business rules. Docker first start loads it automatically; set `DEMO_DATA=false` to skip.
 
+## Vaccination register and growth charts
+Sidebar **Clinical → Vaccinations**: due/overdue list for children, per-patient schedule (given, refused, deferred, overdue, upcoming, optional), outside doses, batch/expiry, printable vaccination card. The routine schedule is loaded by `npm run db:catalog` from the Qatar MoPH national schedule and is editable in **Vaccine Master**: verify it against the current MoPH schedule before go-live. **Growth Charts (WHO)** plots weight, length/height, head circumference and BMI against the WHO Child Growth Standards (0–5 years, z-scores and percentiles, flags below -2 / above +2 SD); triage vitals feed it automatically. Premature-birth age correction is not applied. Test: `node test/paediatrics.js` on `db:reset:demo`.
+
 ## Dental module
 Sidebar **Dental**: a visual chart (FDI numbering, permanent and primary teeth, five surfaces per tooth, 16 conditions), treatment plans with priced procedures, and completion that posts the charge to the patient's open visit and updates the chart. Demo dentist: `drdental`. Patients not yet treated by the dentist need a break-glass reason (audited), like Patient 360.
 

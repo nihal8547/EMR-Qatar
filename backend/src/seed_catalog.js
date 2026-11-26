@@ -9,13 +9,14 @@ const db = require('./db');
 const DRUGS = require('./catalog/drugs');
 const { LAB, RAD, OTHER } = require('./catalog/services');
 const DX = require('./catalog/diagnoses');
+const VACC = require('./catalog/vaccines');
 
 const n = (v) => (v === '-' || v === '' || v === undefined ? null : Number(v));
 const FORM_UNIT = { Tablet: 'tab', Capsule: 'cap', Syrup: 'bottle', Injection: 'vial', Cream: 'tube', Drops: 'bottle', Inhaler: 'inhaler', Other: 'unit' };
 const SCHED = { C: 'Controlled', N: 'Narcotic' };
 
 async function loadCatalog(c) {
-  const out = { drugs: 0, lab_tests: 0, radiology: 0, services: 0, diagnoses: 0 };
+  const out = { drugs: 0, lab_tests: 0, radiology: 0, services: 0, diagnoses: 0, vaccines: 0 };
   const dept = {};
   for (const r of (await c.query(`SELECT id, code FROM "admin"."departments" WHERE is_deleted=false`)).rows) dept[r.code] = r.id;
   const svcId = async (code) => (await c.query(`SELECT id FROM "billing"."services" WHERE code=$1 AND is_deleted=false`, [code])).rows[0]?.id;
@@ -77,6 +78,20 @@ async function loadCatalog(c) {
     const r = await c.query(`INSERT INTO "clinical"."diagnosis_codes"(code,description,code_system,active) VALUES ($1,$2,'ICD-10',true) ON CONFLICT DO NOTHING`, [l.slice(0, i), l.slice(i + 1)]);
     out.diagnoses += r.rowCount;
   }
+  // vaccines + Qatar routine schedule (schedule rows only added when the vaccine has none yet)
+  for (const l of VACC) {
+    const [code, name, protects, route, site, doses] = l.split('|');
+    let id = (await c.query(`SELECT id FROM "clinical"."vaccines" WHERE code=$1`, [code])).rows[0]?.id;
+    if (!id) {
+      id = (await c.query(`INSERT INTO "clinical"."vaccines"(code,name,protects_against,route,usual_site,active) VALUES ($1,$2,$3,$4,$5,true) RETURNING id`, [code, name, protects, route, site])).rows[0].id;
+      out.vaccines++;
+    }
+    if ((await c.query(`SELECT 1 FROM "clinical"."vaccine_schedule" WHERE vaccine_id=$1`, [id])).rowCount) continue;
+    for (const d of (doses || '').split(';').filter(Boolean)) {
+      const [dose, age, win, routine, label] = d.split(':');
+      await c.query(`INSERT INTO "clinical"."vaccine_schedule"(vaccine_id,dose_no,label,due_age_months,window_months,routine) VALUES ($1,$2,$3,$4,$5,$6)`, [id, Number(dose), label || null, Number(age), Number(win), routine === '1']);
+    }
+  }
   return out;
 }
 
@@ -90,7 +105,7 @@ if (require.main === module) {
       await c.query('BEGIN');
       const r = await loadCatalog(c);
       await c.query('COMMIT');
-      console.log(`Catalogue loaded: ${r.drugs} drugs, ${r.lab_tests} lab tests, ${r.radiology} imaging services, ${r.services} new billing services, ${r.diagnoses} diagnosis codes.`);
+      console.log(`Catalogue loaded: ${r.drugs} drugs, ${r.lab_tests} lab tests, ${r.radiology} imaging services, ${r.services} new billing services, ${r.diagnoses} diagnosis codes, ${r.vaccines} vaccines.`);
     } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); await db.pool.end(); }
   })().catch((e) => { console.error(e.message); process.exit(1); });
 }

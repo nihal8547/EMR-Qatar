@@ -32,7 +32,7 @@ onMounted(() => load())
     <div v-else-if="d">
       <div class="phead"><div class="pav">{{ (d.patient.full_name || '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase() }}</div>
         <div><h1 style="margin:0">{{ d.patient.full_name }}</h1><div class="pchips"><span class="badge">{{ d.patient.mrn }}</span><span class="badge grey">QID {{ d.patient.qid || '–' }}</span><span class="badge grey">{{ d.patient.age }}y · {{ d.patient.gender }}</span><span v-if="d.patient.phone" class="badge grey">{{ d.patient.phone }}</span></div></div>
-        <div class="sp"></div><NuxtLink :to="`/r/patients/${d.patient.id}`" class="btn">Demographics</NuxtLink></div>
+        <div class="sp"></div><NuxtLink v-if="can('immunizations.view')" :to="`/vaccinations?patient=${d.patient.id}`" class="btn">💉 Vaccines</NuxtLink><NuxtLink v-if="can('growth_measurements.view') && d.patient.age <= 19" :to="`/growth?patient=${d.patient.id}`" class="btn">📈 Growth</NuxtLink><NuxtLink :to="`/r/patients/${d.patient.id}`" class="btn">Demographics</NuxtLink></div>
       <div class="tabs no-print"><button :class="{ on: tab === 'overview' }" @click="tab = 'overview'">Overview</button><button :class="{ on: tab === 'history' }" @click="tab = 'history'">Full history</button></div>
       <div class="alert" :class="d.allergies.length ? 'err' : 'ok'"><b>Allergies:</b> <template v-if="d.allergies.length"><span v-for="a in d.allergies" :key="a.allergen" class="badge red" style="margin-right:4px">{{ a.allergen }} {{ a.reaction ? '– ' + a.reaction : '' }}</span></template><template v-else>none recorded</template></div>
       <div v-if="tab === 'history'">

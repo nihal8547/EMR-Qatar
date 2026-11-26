@@ -79,6 +79,7 @@ app.get('/api/meta', (req, res) => {
 
 app.use('/api', require('./workflows/portal'));
 app.use('/api', require('./workflows/dental'));
+app.use('/api', require('./workflows/paediatrics'));
 app.use('/api', require('./workflows/pricing'));
 app.use('/api', require('./workflows/admin'));
 app.use('/api', require('./workflows/reports'));

@@ -68,7 +68,7 @@ const tabs = computed(() => [['notes', 'Consultation', d.value?.diagnoses?.lengt
 </script>
 <template>
   <div v-if="d">
-    <div class="bar"><NuxtLink to="/consult">‹ My consultations</NuxtLink><div class="sp"></div><NuxtLink :to="`/print/visit-summary/${d?.visit?.id || route.params.id}`" class="btn sm">🖨 Visit summary</NuxtLink><NuxtLink v-if="d?.lab_orders?.length || d?.imaging_orders?.length" :to="`/print/results/${d?.visit?.id || route.params.id}`" class="btn sm">🖨 All results</NuxtLink>
+    <div class="bar"><NuxtLink to="/consult">‹ My consultations</NuxtLink><div class="sp"></div><NuxtLink v-if="d?.visit?.patient_id && can('immunizations.view')" :to="`/vaccinations?patient=${d.visit.patient_id}`" class="btn sm">💉 Vaccines</NuxtLink><NuxtLink v-if="d?.visit?.patient_id && can('growth_measurements.view')" :to="`/growth?patient=${d.visit.patient_id}`" class="btn sm">📈 Growth</NuxtLink><NuxtLink :to="`/print/visit-summary/${d?.visit?.id || route.params.id}`" class="btn sm">🖨 Visit summary</NuxtLink><NuxtLink v-if="d?.lab_orders?.length || d?.imaging_orders?.length" :to="`/print/results/${d?.visit?.id || route.params.id}`" class="btn sm">🖨 All results</NuxtLink>
       <NuxtLink v-if="can('patients.360')" :to="`/patient/${d.patient.id}`" class="btn">Patient 360</NuxtLink>
       <NuxtLink :to="`/r/certificates/new?visit_id=${vid}`" class="btn">Medical certificate</NuxtLink><NuxtLink :to="`/r/referrals/new?visit_id=${vid}`" class="btn">Referral</NuxtLink>
     </div>
