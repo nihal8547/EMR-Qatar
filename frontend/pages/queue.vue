@@ -23,7 +23,7 @@ async function move(v: any, status: string) {
         <div v-if="!by(c).length" class="qempty">No patients</div>
         <div v-for="v in by(c)" :key="v.id" class="qcard">
           <div><b>#{{ v.token_no }}</b> {{ v.full_name }}</div>
-          <div class="small muted">{{ v.mrn }} · {{ v.age }}y {{ v.gender?.[0] }} · {{ v.doctor_name }}</div>
+          <div class="small muted">{{ v.mrn }} · {{ v.age }}y {{ v.gender?.[0] }} · {{ v.doctor_name || 'Walk-in (lab / X-ray)' }}</div>
           <div class="small"><span class="badge">{{ v.payer_type }}</span> <span v-if="v.payer_type === 'Insurance'" class="badge" :class="badgeClass(v.eligibility_status)">{{ v.eligibility_status }}</span> <span v-if="v.status !== 'Completed'" class="muted">⏱ {{ v.waiting_min }} min</span></div>
           <div v-if="v.complaint" class="small" style="margin-top:4px">{{ v.complaint }}</div>
           <div class="qacts">

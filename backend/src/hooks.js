@@ -146,6 +146,8 @@ const H = {
       `UPDATE "radiology"."imaging_reports" SET reported_by = COALESCE(reported_by, $1) WHERE id=$2`, [ctx.user.id, ctx.row.id]);
     const st = ctx.row.status === 'Final' ? 'Reported' : 'In Progress';
     await ctx.client.query(`UPDATE "radiology"."imaging_orders" SET status=$1, updated_at=now() WHERE id=$2`, [st, ctx.row.order_id]);
+    const o = (await ctx.client.query(`SELECT visit_id FROM "radiology"."imaging_orders" WHERE id=$1`, [ctx.row.order_id])).rows[0];
+    if (o && o.visit_id) await require('./billingCore').settleVisit(ctx.client, o.visit_id);
   },
 
   /* ----- billing ----- */

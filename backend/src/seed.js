@@ -50,7 +50,7 @@ const ROLES = [
   {
     name: 'Receptionist', description: 'Registration, appointments, check-in', restrict: false, discount: 5,
     perms: [
-      'dashboard.view', 'visits.start', 'billing.cashier', 'billing.discount', 'invoices:v', 'payments:v', 'bill_cancel_requests:vc', 'queue.view', 'patients:vce', 'patient_family:vced', 'patient_allergies:v', 'patient_documents:vce', 'consents:vce',
+      'dashboard.view', 'visits.start', 'walkin.create', 'billing.cashier', 'billing.discount', 'invoices:v', 'payments:v', 'bill_cancel_requests:vc', 'queue.view', 'patients:vce', 'patient_family:vced', 'patient_allergies:v', 'patient_documents:vce', 'consents:vce',
       'appointments:vced', 'doctor_schedules:v', 'visits:ve', 'policy_members:vce', 'payers:v', 'plans:v', 'eligibility_checks:v', 'corporate_accounts:v', 'users:v', ...LOOKUPS,
     ],
   },
@@ -100,7 +100,7 @@ const ROLES = [
   {
     name: 'Cashier', description: 'Invoices, payments, deposits, refund requests, cashier session', restrict: false, discount: 5,
     perms: [
-      'dashboard.view', 'pricing.view', 'billing.cashier', 'billing.discount', 'queue.view', 'patients:v', 'visits:v', 'services:v', 'packages:v', 'package_items:v', 'price_lists:v', 'price_list_items:v',
+      'dashboard.view', 'pricing.view', 'billing.cashier', 'walkin.create', 'billing.discount', 'queue.view', 'patients:v', 'visits:v', 'services:v', 'packages:v', 'package_items:v', 'price_lists:v', 'price_list_items:v',
       'charges:vce', 'invoices:v', 'payments:v', 'deposits:vc', 'refunds:vc', 'credit_notes:vc', 'bill_cancel_requests:v+approve+reject', 'cashier_sessions:v', 'discount_approvals:vc',
       'policy_members:v', 'payers:v', 'plans:v', 'corporate_accounts:v', 'guarantee_letters:v', 'pre_auths:v', 'users:v', ...LOOKUPS,
     ],

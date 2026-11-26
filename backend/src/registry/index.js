@@ -25,6 +25,7 @@ const MODULES = [
 const CUSTOM_PAGES = [
   { module: 'dashboard', label: 'Dashboard', to: '/', perm: 'dashboard.view' },
   { module: 'front', label: 'Start Visit (Check-in)', to: '/visit-start', perm: 'visits.start' },
+  { module: 'front', label: 'Walk-in Tests / X-ray (Outside)', to: '/walk-in', perm: 'walkin.create' },
   { module: 'front', label: 'Patient Payments (Bills / Tests / X-ray)', to: '/front-payments', perm: 'billing.cashier' },
   { module: 'front', label: 'Bill Cancel Requests', to: '/r/bill_cancel_requests', perm: 'bill_cancel_requests.view' },
   { module: 'front', label: 'Queue Board', to: '/queue', perm: 'queue.view' },
@@ -51,6 +52,7 @@ const EXTRA_PERMISSIONS = [
   ['dental.chart', 'Open the dental chart'],
   ['dental.complete', 'Mark dental procedures done (posts charges)'],
   ['visits.start', 'Start / check-in a visit'],
+  ['walkin.create', 'Register walk-in / outside lab and X-ray patients and collect payment'],
   ['queue.view', 'View queue board'],
   ['consult.use', 'Use doctor consultation screen'],
   ['patients.360', 'Open Patient 360 view'],
