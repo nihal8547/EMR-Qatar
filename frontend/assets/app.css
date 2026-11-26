@@ -158,3 +158,6 @@ tr.click:hover td{background:#f7f7f7}
 .sub-card h2{display:flex;align-items:center;gap:8px}.sub-card .cnt{font-size:11px;background:#f1f1f1;color:#525252;border-radius:99px;padding:1px 8px;font-weight:600}
 .none-txt{color:#a3a3a3;font-size:13px;padding:4px 0}
 @media (max-width:900px){.content{padding:14px}.top{padding:10px 14px}.qb{grid-auto-columns:80%}.crumb .mod{display:none}}
+.pcard{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#fafafa}
+.pav.sm{width:38px;height:38px;font-size:13px}
+.pol{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-bottom:6px;background:#fff}.pol.on{border-color:#111;box-shadow:0 0 0 1px #111}

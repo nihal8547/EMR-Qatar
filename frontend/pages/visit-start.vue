@@ -7,7 +7,9 @@ const appts = ref<any[]>([])
 const result = ref<any>(null)
 const busy = ref(false)
 const dupAsk = ref(false)
-const payNow = reactive<any>({ method: 'Cash', reference: '', done: null, busy: false })
+const payNow = reactive<any>({ method: 'Cash', reference: '', done: null, busy: false, atStart: true })
+const pat = ref<any>(null)
+const route = useRoute()
 async function collectNow() {
   payNow.busy = true
   try {
@@ -22,10 +24,11 @@ async function collectNow() {
 }
 
 async function loadAppts() { try { appts.value = (await api('/r/appointments', { query: { appt_date: todayStr(), limit: 100, sort: 'appt_time', dir: 'asc' } })).rows.filter((a: any) => ['Booked', 'Confirmed'].includes(a.status)) } catch { appts.value = [] } }
-onMounted(loadAppts)
+onMounted(() => { loadAppts(); if (route.query.patient) f.patient_id = Number(route.query.patient) || route.query.patient })
 watch(() => f.patient_id, async (id) => {
-  f.policy_id = null; policies.value = []
+  f.policy_id = null; policies.value = []; pat.value = null
   if (!id) return
+  try { pat.value = await api(`/r/patients/${id}`) } catch { pat.value = null }
   try { policies.value = (await api('/r/policy_members', { query: { patient_id: id, limit: 50 } })).rows } catch { policies.value = [] }
   if (policies.value.length === 1 && f.payer_type === 'Insurance') f.policy_id = policies.value[0].id
 })
@@ -37,12 +40,13 @@ async function start(allow = false) {
   try {
     result.value = await api('/visits/start', { method: 'POST', body: { ...f, allow_duplicate: allow, discount: disc.on && Number(disc.value) > 0 ? { type: disc.type, value: Number(disc.value), reason: disc.reason } : undefined } })
     ok(`Visit ${result.value.visit_no} started`); loadAppts()
+    if (payNow.atStart && can('billing.cashier')) await collectNow()
   } catch (e: any) {
     if (e.status === 409 && /already has open visit/.test(e.message)) dupAsk.value = true
     err(e)
   } finally { busy.value = false }
 }
-function reset() { payNow.done = null; payNow.reference = ''; disc.on = false; disc.value = ''; disc.reason = ''; disc.preset = ''; est.value = null; loadPending(); result.value = null; Object.assign(f, { patient_id: null, doctor_id: null, visit_type: 'OPD', payer_type: 'Cash', policy_id: null, corporate_id: null, appointment_id: null, complaint: '' }) }
+function reset() { pat.value = null; payNow.done = null; payNow.reference = ''; disc.on = false; disc.value = ''; disc.reason = ''; disc.preset = ''; est.value = null; loadPending(); result.value = null; Object.assign(f, { patient_id: null, doctor_id: null, visit_type: 'OPD', payer_type: 'Cash', policy_id: null, corporate_id: null, appointment_id: null, complaint: '' }) }
 const { can } = useAuth()
 
 /* ---- price estimate + discount ---- */
@@ -91,6 +95,19 @@ async function decide(v: any, approve: boolean) { try { await api(`/visits/${v.i
       <div class="card">
         <div class="fgrid">
           <div class="field wide"><label class="f">Patient <span class="req">*</span> <NuxtLink v-if="can('patients.create')" to="/r/patients/new" class="small">+ register new patient</NuxtLink></label><LookupSelect v-model="f.patient_id" resource="patients" placeholder="Name, MRN, QID or phone" /></div>
+          <div v-if="pat" class="field wide"><div class="pcard">
+            <div class="bar" style="align-items:flex-start"><div class="pav sm">{{ (pat.full_name || '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase() }}</div>
+              <div style="flex:1;min-width:0"><b>{{ pat.full_name }}</b><div class="pchips"><span class="badge">{{ pat.mrn }}</span><span v-if="pat.qid" class="badge grey">QID {{ pat.qid }}</span><span class="badge grey">{{ pat.gender }} · DOB {{ fdate(pat.dob) }}</span><span v-if="pat.phone" class="badge grey">{{ pat.phone }}</span><span v-if="pat.nationality_id__label" class="badge grey">{{ pat.nationality_id__label }}</span></div></div>
+              <NuxtLink :to="`/r/patients/${pat.id}?edit=1&back=${encodeURIComponent('/visit-start?patient=' + pat.id)}`" class="btn sm">✎ Edit patient</NuxtLink>
+              <NuxtLink v-if="can('patients.360')" :to="`/patient/${pat.id}`" class="btn sm">360</NuxtLink></div>
+            <div class="sect" style="margin:12px 0 6px">Insurance</div>
+            <div v-if="!policies.length" class="none-txt">No insurance policy on file. <NuxtLink v-if="can('policy_members.create')" :to="`/r/policy_members/new?patient_id=${pat.id}`">+ Add policy</NuxtLink></div>
+            <div v-for="p in policies" :key="p.id" class="pol" :class="{ on: f.payer_type === 'Insurance' && f.policy_id === p.id }">
+              <div><b>{{ p.payer_id__label }}</b> <span v-if="p.plan_id__label" class="muted">· {{ p.plan_id__label }}</span> <span class="badge" :class="badgeClass(p.status)">{{ p.status }}</span></div>
+              <div class="small muted">Policy {{ p.policy_no }} · Member {{ p.member_id }} · {{ p.relation }} · valid {{ fdate(p.valid_from) || '…' }} → {{ fdate(p.valid_to) }}</div>
+              <div v-if="p.valid_to && String(p.valid_to).slice(0, 10) < todayStr()" class="small warn-text">Policy has expired.</div>
+            </div>
+          </div></div>
           <div class="field"><label class="f">Doctor <span class="req">*</span></label><LookupSelect v-model="f.doctor_id" resource="doctors" /></div>
           <div class="field"><label class="f">Visit type</label><select v-model="f.visit_type"><option>OPD</option><option>Follow-up</option><option>Emergency</option><option>Tele</option></select></div>
           <div class="field"><label class="f">Payer</label><select v-model="f.payer_type"><option>Cash</option><option>Insurance</option><option>Corporate</option></select></div>
@@ -116,8 +133,12 @@ async function decide(v: any, approve: boolean) { try { await api(`/visits/${v.i
             <div class="small muted" style="margin-top:4px">Applies to the whole bill (consultation, tests, medicines) when it is invoiced. An amount is converted to a % of the bill at that time.</div>
           </div>
         </div>
+        <div v-if="can('billing.cashier')" class="field wide" style="margin-top:6px">
+          <label class="f" style="display:flex;gap:8px;align-items:center"><input v-model="payNow.atStart" type="checkbox" style="width:auto" /> Collect payment at check-in <span v-if="est && est.service" class="badge ok">Patient pays {{ money(est.patient_share) }}</span></label>
+          <div v-if="payNow.atStart" class="bar" style="margin:6px 0"><select v-model="payNow.method" style="width:150px"><option>Cash</option><option>Card</option><option>Bank transfer</option><option>Online</option></select><input v-model="payNow.reference" placeholder="Reference (card slip, optional)" style="width:220px" /><span class="small muted">Received when you press Start visit; shows in Cashier, Invoices and Payments. Cash needs your cashier session open.</span></div>
+        </div>
         <div v-if="dupAsk" class="alert warn">This patient already has an open visit with this doctor today. Start a second one anyway? <button class="sm" @click="start(true)">Yes, start another</button></div>
-        <button class="p" :disabled="busy || !f.patient_id || !f.doctor_id || !discValid" @click="start(false)">{{ busy ? 'Starting…' : 'Start visit' }}</button>
+        <button class="p" :disabled="busy || !f.patient_id || !f.doctor_id || !discValid" @click="start(false)">{{ busy ? 'Working…' : (payNow.atStart && can('billing.cashier') ? 'Start visit & collect payment' : 'Start visit') }}</button>
       </div>
       <div>
       <div class="card">
