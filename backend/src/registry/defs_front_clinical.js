@@ -113,6 +113,8 @@ module.exports = (R) => {
     'referred_by:text:Referred by (outside doctor / clinic)',
     'appointment_id:ref=appointments:Appointment',
     'closed_at:datetime:Closed at:ro',
+    'cancel_reason:text:Cancel reason:ro',
+    'cancelled_by:ref=users:Cancelled by:ro',
     'discount_type:select=percent/amount:Check-in discount type:ro',
     'discount_value:decimal:Check-in discount value:ro',
     'discount_reason:text:Discount reason:ro',

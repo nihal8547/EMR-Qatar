@@ -10,8 +10,9 @@ onBeforeUnmount(() => clearInterval(timer))
 watch([date, doctor], load)
 const by = (s: string) => rows.value.filter((r) => r.status === s)
 async function move(v: any, status: string) {
-  if (status === 'Cancelled' && !confirm(`Cancel visit ${v.visit_no}?`)) return
-  try { await api(`/visits/${v.id}/status`, { method: 'PUT', body: { status } }); ok(`${v.visit_no} → ${status}`); load() } catch (e) { err(e) }
+  let reason: string | undefined
+  if (status === 'Cancelled') { reason = prompt(`Cancel visit ${v.visit_no}? Reason (required):`) || ''; if (reason.trim().length < 3) return }
+  try { await api(`/visits/${v.id}/status`, { method: 'PUT', body: { status, reason } }); ok(`${v.visit_no} → ${status}`); load() } catch (e) { err(e) }
 }
 </script>
 <template>
@@ -31,9 +32,10 @@ async function move(v: any, status: string) {
             <NuxtLink v-if="can('consult.use')" :to="`/consult/${v.id}`" class="btn sm">Consult</NuxtLink>
             <NuxtLink v-if="can('billing.cashier')" :to="`/cashier?visit=${v.id}`" class="btn sm">Bill</NuxtLink>
             <NuxtLink v-if="can('patients.360')" :to="`/patient/${v.patient_id}`" class="btn sm">360</NuxtLink>
+            <NuxtLink v-if="can('visits.manage')" :to="`/visit-manage?visit=${v.id}`" class="btn sm">Manage</NuxtLink>
           </div>
           <select v-if="v.status !== 'Completed'" style="margin-top:6px;font-size:12px" :value="v.status" @change="move(v, ($event.target as HTMLSelectElement).value)">
-            <option v-for="s in [...cols.slice(0, 6), 'Completed', 'Cancelled']" :key="s" :value="s">{{ s === v.status ? 'Status: ' + s : '→ ' + s }}</option>
+            <option v-for="s in [...cols.slice(0, 6), 'Completed', ...(can('visits.manage') ? ['Cancelled'] : [])]" :key="s" :value="s">{{ s === v.status ? 'Status: ' + s : '→ ' + s }}</option>
           </select>
         </div>
       </div>

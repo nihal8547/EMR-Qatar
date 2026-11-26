@@ -104,6 +104,7 @@ const statusField = computed(() => fields.value.find((f) => f.name === 'status')
       <NuxtLink :to="`/r/${key}`">‹ {{ m.label }}</NuxtLink><div class="sp"></div>
       <template v-if="!isNew">
         <NuxtLink v-if="key === 'patients' && can('patients.360')" :to="`/patient/${idParam}`" class="btn">Patient 360</NuxtLink>
+        <NuxtLink v-if="key === 'visits' && can('visits.manage')" :to="`/visit-manage?visit=${idParam}`" class="btn">⚙ Manage visit</NuxtLink>
         <NuxtLink v-if="key === 'invoices'" :to="`/print/invoice/${idParam}`" class="btn">🖨 Print invoice</NuxtLink>
         <NuxtLink v-if="key === 'lab_orders'" :to="`/print/lab-slip/${idParam}`" class="btn">🖨 Collection slip</NuxtLink>
         <NuxtLink v-if="key === 'lab_orders'" :to="`/print/lab/${idParam}`" class="btn">🖨 Lab report</NuxtLink>

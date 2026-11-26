@@ -42,7 +42,7 @@ const ROLES = [
   {
     name: 'Hospital Manager', description: 'Read-only oversight of every area, approvals, all reports', restrict: false, discount: 20,
     perms: [
-      ...reg.order.map((k) => `${k}:v`), 'dashboard.view', 'pricing.view', 'reports.view', 'reports.finance', 'billing.approve_discount', 'patients.360',
+      ...reg.order.map((k) => `${k}:v`), 'dashboard.view', 'pricing.view', 'reports.view', 'reports.finance', 'billing.approve_discount', 'patients.360', 'visits.manage',
       'refunds:v+approve+reject', 'bill_cancel_requests:v+approve+reject', 'credit_notes:v+approve', 'discount_approvals:v+approve+reject', 'write_offs:v+approve+reject', 'leaves:v+approve+reject',
       'dental.chart', 'requisitions:v+approve+reject', 'purchase_orders:v+approve+cancel', 'payroll_runs:v+approve', 'users:vced', 'roles:v', 'audit_log:v',
     ],
@@ -50,7 +50,7 @@ const ROLES = [
   {
     name: 'Receptionist', description: 'Registration, appointments, check-in', restrict: false, discount: 5,
     perms: [
-      'dashboard.view', 'visits.start', 'walkin.create', 'billing.cashier', 'billing.discount', 'invoices:v', 'payments:v', 'bill_cancel_requests:vc', 'queue.view', 'patients:vce', 'patient_family:vced', 'patient_allergies:v', 'patient_documents:vce', 'consents:vce',
+      'dashboard.view', 'visits.start', 'visits.manage', 'walkin.create', 'billing.cashier', 'billing.discount', 'invoices:v', 'payments:v', 'bill_cancel_requests:vc', 'queue.view', 'patients:vce', 'patient_family:vced', 'patient_allergies:v', 'patient_documents:vce', 'consents:vce',
       'appointments:vced', 'doctor_schedules:v', 'visits:ve', 'policy_members:vce', 'payers:v', 'plans:v', 'eligibility_checks:v', 'corporate_accounts:v', 'users:v', ...LOOKUPS,
     ],
   },

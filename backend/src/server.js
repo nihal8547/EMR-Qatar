@@ -59,6 +59,7 @@ app.use('/api', require('./workflows/diagnostics'));
 app.use('/api', require('./workflows/pharmacy'));
 app.use('/api', require('./workflows/billing'));
 app.use('/api', require('./workflows/walkin'));
+app.use('/api', require('./workflows/visitmanage'));
 app.use('/api', crud.router); // generic CRUD last: it blocks portal users
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));

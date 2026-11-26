@@ -193,10 +193,9 @@ router.put('/visits/:id/status', need('queue.view'), wrap(async (req, res) => {
     const v = await getVisit(client, Number(req.params.id));
     if (v.status === 'Completed' && status !== 'Completed') throw conflict('Completed visits cannot be reopened');
     if (status === 'Cancelled') {
-      const paid = (await client.query(`SELECT COUNT(*)::int n FROM "billing"."payments" p JOIN "billing"."invoices" i ON i.id=p.invoice_id WHERE i.visit_id=$1`, [v.id])).rows[0].n;
-      if (paid) throw conflict('A payment exists for this visit; use a refund instead of cancelling');
-      await client.query(`UPDATE "billing"."charges" SET status='Cancelled', updated_at=now() WHERE visit_id=$1 AND status='Pending'`, [v.id]);
-      await client.query(`UPDATE "billing"."invoices" SET status='Cancelled', updated_at=now() WHERE visit_id=$1 AND status <> 'Cancelled'`, [v.id]);
+      if (!can(req, 'visits.manage')) throw forbidden('You cannot cancel visits');
+      await require('../visitOps').cancelVisit(client, req.user, v, req.body.reason, req.ip);
+      return;
     }
     await client.query(`UPDATE "scheduling"."visits" SET status=$1, updated_at=now(), closed_at = CASE WHEN $1 IN ('Completed','Cancelled') THEN now() ELSE closed_at END WHERE id=$2`, [status, v.id]);
     await audit(client, req.user, 'VISIT_STATUS', 'visits', v.id, { from: v.status, to: status }, req.ip);
