@@ -38,7 +38,7 @@ async function load() {
     try {
       const r = await api(`/r/${key.value}/${idParam.value}`)
       setRecord(r)
-      editing.value = false
+      editing.value = route.query.edit === '1' && m.value.can?.edit !== false
     } catch (e) { err(e); m.value = null }
   }
   loaded.value = true
@@ -78,6 +78,7 @@ async function save() {
     } else {
       const r = await api(`/r/${key.value}/${idParam.value}`, { method: 'PUT', body })
       setRecord(r); editing.value = false; ok('Saved')
+      if (typeof route.query.back === 'string' && route.query.back.startsWith('/')) await navigateTo(route.query.back)
     }
   } catch (e) { err(e) } finally { busy.value = false }
 }
@@ -121,7 +122,7 @@ const statusField = computed(() => fields.value.find((f) => f.name === 'status')
       <div v-if="isNew && !m.can.create" class="alert err">Your role cannot create this kind of record.</div>
       <RecordForm :fields="fields" :model="model" :labels="labels" :mode="isNew ? 'create' : 'edit'" :readonly="!editing" />
       <InsuranceBlock v-if="isNew && key === 'patients' && can('policy_members.create')" v-model="policies" />
-      <div v-if="editing" class="bar" style="margin-top:8px"><button class="p" :disabled="busy || (isNew && !m.can.create)" @click="save">{{ busy ? 'Saving…' : 'Save' }}</button><button @click="isNew ? navigateTo(`/r/${key}`) : load()">Cancel</button></div>
+      <div v-if="editing" class="bar" style="margin-top:8px"><button class="p" :disabled="busy || (isNew && !m.can.create)" @click="save">{{ busy ? 'Saving…' : 'Save' }}</button><button @click="typeof route.query.back === 'string' && route.query.back.startsWith('/') ? navigateTo(route.query.back) : isNew ? navigateTo(`/r/${key}`) : load()">Cancel</button></div>
     </div>
     <template v-if="!isNew">
       <ChildTable v-for="c in m.children" :key="c.res + childKey" :child="c" :parent-id="Number(idParam)" :meta="useMeta().meta.value || {}" :editable="true" @changed="reload" />
