@@ -19,6 +19,10 @@ watch([q, status], () => { clearTimeout(dq); dq = setTimeout(load, 300) })
 const cur = computed(() => orders.value.find((o) => o.id === open.value))
 async function act(fn: () => Promise<any>, msg: string) { busy.value = true; try { const r = await fn(); ok(msg); await load(); return r } catch (e) { err(e) } finally { busy.value = false } }
 const collect = (o: any) => act(async () => { const r = await api(`/lab/orders/${o.id}/collect`, { method: 'POST', body: {} }); if (r?.barcodes?.length) ok('Barcode(s): ' + r.barcodes.join(', ')) }, 'Sample collected')
+async function collectAndLabel(o: any) {
+  busy.value = true
+  try { await api(`/lab/orders/${o.id}/collect`, { method: 'POST', body: {} }); ok('Sample collected — printing tube labels'); await navigateTo(`/print/lab-labels/${o.id}?auto=1`) } catch (e) { err(e) } finally { busy.value = false }
+}
 const rejectSpec = (s: any) => { const reason = prompt('Reason for rejecting this specimen:'); if (reason) act(() => api(`/lab/specimens/${s.id}/reject`, { method: 'POST', body: { reason } }), 'Specimen rejected') }
 async function saveResult(i: any) {
   const x = vals[i.id]
@@ -45,8 +49,8 @@ const fc = (f: string) => (f?.startsWith('Critical') ? 'flag-C' : f === 'High' |
       </div>
       <div v-if="cur" class="card">
         <div class="bar"><div><h2 style="margin:0">{{ cur.order_no }} — {{ cur.full_name }}</h2><div class="small muted">{{ cur.mrn }} · {{ cur.gender }} · ordered by {{ cur.doctor }}</div></div><div class="sp"></div>
-          <NuxtLink v-if="can('lab_orders.view')" :to="`/print/lab-slip/${cur.id}`" class="btn">🖨 Collection slip</NuxtLink><NuxtLink v-if="can('lab_orders.view')" :to="`/print/lab/${cur.id}`" class="btn">🖨 Report</NuxtLink></div>
-        <div v-if="cur.status === 'Ordered'" class="alert info">Sample not collected yet. <button class="p sm" :disabled="busy" @click="collect(cur)">Collect sample</button></div>
+          <NuxtLink v-if="can('lab_orders.view') && cur.specimens.length" :to="`/print/lab-labels/${cur.id}`" class="btn p">🏷 Tube labels</NuxtLink><NuxtLink v-if="can('lab_orders.view')" :to="`/print/lab-slip/${cur.id}`" class="btn">🖨 Collection slip</NuxtLink><NuxtLink v-if="can('lab_orders.view')" :to="`/print/lab/${cur.id}`" class="btn">🖨 Report</NuxtLink></div>
+        <div v-if="cur.status === 'Ordered'" class="alert info">Sample not collected yet. <button class="p sm" :disabled="busy" @click="collectAndLabel(cur)">Collect sample &amp; print tube labels</button> <button class="sm" :disabled="busy" @click="collect(cur)">Collect only</button></div>
         <div v-if="cur.specimens.length" class="small" style="margin-bottom:8px"><b>Specimens:</b> <span v-for="s in cur.specimens" :key="s.id" class="badge" :class="badgeClass(s.status)" style="margin-right:6px">{{ s.barcode }} · {{ s.sample_type }} · {{ s.status }}</span>
           <button v-for="s in cur.specimens.filter((x: any) => x.status !== 'Rejected')" :key="'r' + s.id" class="sm danger" @click="rejectSpec(s)">Reject {{ s.barcode }}</button></div>
         <table><thead><tr><th>Test</th><th>Result</th><th>Text result</th><th>Range</th><th>Flag</th><th>Status</th><th></th></tr></thead>

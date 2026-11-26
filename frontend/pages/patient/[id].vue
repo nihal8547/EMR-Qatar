@@ -15,6 +15,7 @@ async function loadHist() {
   try { h.value = await api(`/patients/${route.params.id}/history`, { query: { breakglass: reason.value.trim() || undefined } }); (h.value.visits[0] ? (open[h.value.visits[0].id] = true) : 0) } catch (e) { err(e) } finally { hBusy.value = false }
 }
 watch(tab, (t) => { if (t === 'history') loadHist() })
+const printHistory = async () => { allOpen(true); await nextTick(); window.print() }
 const allOpen = (v: boolean) => (h.value?.visits || []).forEach((x: any) => (open[x.id] = v))
 const flagCls = (f: string) => (/Critical/.test(f || '') ? 'red' : f && f !== 'Normal' ? 'amber' : '')
 const bp = (v: any) => (v.bp_systolic ? `${v.bp_systolic}/${v.bp_diastolic}` : '')
@@ -39,7 +40,7 @@ onMounted(() => load())
         <template v-else>
           <div class="bar no-print"><div class="muted small">{{ h.visits.length }} visit(s) on record</div><div class="sp"></div>
             <span v-if="h.totals" class="badge grey">Billed {{ money(h.totals.billed) }}</span><span v-if="h.totals" class="badge ok">Paid {{ money(h.totals.paid) }}</span><span v-if="h.totals && h.totals.due > 0" class="badge red">Due {{ money(h.totals.due) }}</span>
-            <button class="sm" @click="allOpen(true)">Expand all</button><button class="sm" @click="allOpen(false)">Collapse all</button><button class="sm" @click="allOpen(true); $nextTick(() => window.print())">🖨 Print history</button></div>
+            <button class="sm" @click="allOpen(true)">Expand all</button><button class="sm" @click="allOpen(false)">Collapse all</button><button class="sm" @click="printHistory">🖨 Print history</button></div>
           <div v-if="!h.visits.length" class="empty">No visits yet.</div>
           <div v-for="v in h.visits" :key="v.id" class="card hv">
             <div class="hv-h" @click="open[v.id] = !open[v.id]">

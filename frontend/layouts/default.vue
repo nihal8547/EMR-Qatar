@@ -16,7 +16,11 @@ const active = (to: string) => (to === '/' ? route.path === '/' : route.path ===
 const holdsActive = (g: any) => g.items.some((i: any) => active(i.to))
 const showItems = (g: any) => (q.value ? true : closed.value[g.key] === undefined ? holdsActive(g) : closed.value[g.key] === false)
 const initials = computed(() => (state.value.user?.full_name || '?').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase())
-const crumb = computed(() => { for (const g of state.value.menu) for (const i of g.items) if (active(i.to)) return { mod: g.key === 'dashboard' ? '' : g.label, page: i.label }; return { mod: 'Front Office', page: route.path.startsWith('/patient/') ? 'Patient 360' : '' } })
+const crumb = computed(() => { for (const g of state.value.menu) for (const i of g.items) if (active(i.to)) return { mod: g.key === 'dashboard' ? '' : g.label, page: i.label }; const p = route.path
+  if (p.startsWith('/patient/')) return { mod: 'Front Office', page: 'Patient 360' }
+  if (p.startsWith('/print/lab-labels')) return { mod: 'Laboratory', page: 'Tube labels' }
+  if (p.startsWith('/print/')) return { mod: '', page: 'Print' }
+  return { mod: '', page: '' } })
 watch(() => route.path, () => { open.value = false })
 </script>
 <template>
