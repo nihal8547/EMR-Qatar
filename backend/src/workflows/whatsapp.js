@@ -1,4 +1,5 @@
 'use strict';
+const sec = require('../security');
 /** Connect the centre's WhatsApp number (Evolution API instance): status, QR code, disconnect, test message, n8n options. */
 const express = require('express');
 const db = require('../db');
@@ -18,7 +19,7 @@ async function cfg() {
   return {
     base: String(process.env.EVOLUTION_BASE_URL || s.evolution_base_url || '').replace(/\/+$/, ''),
     instance: String(s.whatsapp_instance || 'qatar-hms').trim(),
-    key: process.env.EVOLUTION_API_KEY || s.evolution_api_key || '',
+    key: process.env.EVOLUTION_API_KEY || sec.decrypt(s.evolution_api_key) || '',
     raw: s,
   };
 }
@@ -26,6 +27,7 @@ async function cfg() {
 async function evo(c, method, path, body) {
   if (!c.base) throw bad('Evolution API URL is not set');
   if (!c.key) throw bad('Evolution API key is not set');
+  if (!process.env.EVOLUTION_BASE_URL) { try { sec.assertSafeUrl(c.base, 'Evolution URL'); } catch (e) { throw bad(e.message); } }
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 20000);
   try {
     const r = await fetch(`${c.base}${path}`, { method, headers: { apikey: c.key, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, signal: ctl.signal });
@@ -48,10 +50,10 @@ router.get('/whatsapp/config', need('whatsapp.manage'), wrap(async (req, res) =>
 
 router.put('/whatsapp/config', need('whatsapp.manage'), wrap(async (req, res) => {
   const b = req.body || {}; const out = {};
-  const url = (k) => { if (b[k] === undefined) return; const v = String(b[k] || '').trim().replace(/\/+$/, ''); if (v && !/^https?:\/\/[^\s]+$/i.test(v)) throw bad(`${k} must be a full http(s) URL`); out[k] = v; };
+  const url = (k) => { if (b[k] === undefined) return; const v = String(b[k] || '').trim().replace(/\/+$/, ''); if (v && !/^https?:\/\/[^\s]+$/i.test(v)) throw bad(`${k} must be a full http(s) URL`); if (v && k !== 'public_base_url') { try { sec.assertSafeUrl(v, k); } catch (e) { throw bad(e.message); } } out[k] = v; };
   url('evolution_base_url'); url('n8n_webhook_base'); url('public_base_url');
   if (b.whatsapp_instance !== undefined) { const v = String(b.whatsapp_instance || '').trim(); if (!/^[A-Za-z0-9_-]{2,60}$/.test(v)) throw bad('Instance name: letters, numbers, - and _ only'); out.whatsapp_instance = v; }
-  if (b.evolution_api_key) out.evolution_api_key = String(b.evolution_api_key).trim();
+  if (b.evolution_api_key) out.evolution_api_key = sec.encrypt(String(b.evolution_api_key).trim());
   for (const k of ['n8n_enabled', 'n8n_send_bill_on_complete']) if (b[k] !== undefined) out[k] = b[k] ? 'true' : 'false';
   for (const [k, v] of Object.entries(out)) {
     const u = await db.query(`UPDATE "admin"."settings" SET value=$2, updated_at=now() WHERE key=$1 AND is_deleted=false`, [k, v]);

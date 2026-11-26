@@ -84,6 +84,27 @@ CREATE TABLE IF NOT EXISTS "admin"."counters" (
   fks.push(`ALTER TABLE "auth"."role_permissions" ADD CONSTRAINT "fk_role_permissions_role" FOREIGN KEY ("role_id") REFERENCES "auth"."roles"("id") ON DELETE CASCADE;`);
 
   out.push(...fks, ...idx);
+  // security: MFA columns + server-side sessions (revocable logins)
+  out.push(`ALTER TABLE "auth"."users" ADD COLUMN IF NOT EXISTS "mfa_secret" text, ADD COLUMN IF NOT EXISTS "mfa_pending" text, ADD COLUMN IF NOT EXISTS "mfa_enabled" boolean NOT NULL DEFAULT false, ADD COLUMN IF NOT EXISTS "mfa_last_step" bigint NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS "password_changed_at" timestamptz;`);
+  out.push(`CREATE TABLE IF NOT EXISTS "auth"."sessions" ("id" uuid PRIMARY KEY DEFAULT gen_random_uuid(), "user_id" bigint NOT NULL REFERENCES "auth"."users"("id") ON DELETE CASCADE, "created_at" timestamptz NOT NULL DEFAULT now(), "last_seen" timestamptz NOT NULL DEFAULT now(), "expires_at" timestamptz NOT NULL, "revoked" boolean NOT NULL DEFAULT false, "ip" text, "ua" text);`);
+  out.push(`CREATE INDEX IF NOT EXISTS "ix_sessions_user" ON "auth"."sessions" ("user_id");`);
+  // tamper-evident audit log: hash chain + append-only (no UPDATE/DELETE)
+  out.push(`ALTER TABLE "admin"."audit_log" ADD COLUMN IF NOT EXISTS "prev_hash" text, ADD COLUMN IF NOT EXISTS "row_hash" text;
+CREATE OR REPLACE FUNCTION "admin"."audit_row_hash"(prev text, id bigint, u text, a text, r text, rid text, ip text, d text, cb bigint) RETURNS text AS $f$
+  SELECT encode(sha256(convert_to(coalesce(prev,'')||'|'||id||'|'||coalesce(u,'')||'|'||coalesce(a,'')||'|'||coalesce(r,'')||'|'||coalesce(rid,'')||'|'||coalesce(ip,'')||'|'||coalesce(d,'')||'|'||coalesce(cb::text,''),'UTF8')),'hex')
+$f$ LANGUAGE sql IMMUTABLE;
+CREATE OR REPLACE FUNCTION "admin"."audit_chain"() RETURNS trigger AS $f$
+DECLARE prev text;
+BEGIN
+  PERFORM pg_advisory_xact_lock(7771001);
+  SELECT row_hash INTO prev FROM "admin"."audit_log" WHERE row_hash IS NOT NULL ORDER BY id DESC LIMIT 1;
+  NEW.prev_hash := coalesce(prev,'GENESIS');
+  NEW.row_hash := "admin"."audit_row_hash"(NEW.prev_hash, NEW.id, NEW.username, NEW.action, NEW.resource, NEW.record_id, NEW.ip, NEW.details::text, NEW.created_by);
+  RETURN NEW;
+END $f$ LANGUAGE plpgsql;
+CREATE TRIGGER "trg_audit_chain" BEFORE INSERT ON "admin"."audit_log" FOR EACH ROW EXECUTE FUNCTION "admin"."audit_chain"();
+CREATE OR REPLACE FUNCTION "admin"."audit_immutable"() RETURNS trigger AS $f$ BEGIN RAISE EXCEPTION 'audit_log is append-only'; END $f$ LANGUAGE plpgsql;
+CREATE TRIGGER "trg_audit_immutable" BEFORE UPDATE OR DELETE ON "admin"."audit_log" FOR EACH ROW EXECUTE FUNCTION "admin"."audit_immutable"();`);
   return out.join('\n') + '\n';
 }
 

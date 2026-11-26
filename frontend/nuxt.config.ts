@@ -3,6 +3,7 @@ export default defineNuxtConfig({
   ssr: false,
   compatibilityDate: '2025-01-01',
   devtools: { enabled: false },
+  runtimeConfig: { public: { idleMin: 30 } },
   telemetry: false,
   css: ['~/assets/app.css'],
   app: {

@@ -3,6 +3,37 @@
 Scope: backend (Express/PostgreSQL), frontend (Nuxt static + service worker), Docker, WhatsApp/n8n integration.
 Method: code review, dependency audit, secret scan, 60+ live attack probes against a running instance, the existing 6065-check role/permission test and the smoke tests.
 
+## 0. Status after hardening (production pass)
+
+Every finding below was worked through one by one. All automated tests pass on a clean database (smoke 286, security 6065, WhatsApp/n8n 49, auth/MFA 36, record-scoping probe).
+
+| # | Finding | Status | What was done |
+|---|---|---|---|
+| 1 | Known seed password in production | Fixed | Random password generated at seed; seeded users must change it at first login |
+| 2 | Doctors/nurses could open any patient's records | Fixed | Care-relationship scoping on every clinical read/list/print; "break-glass" reason (audited) for emergencies; writes blocked |
+| 3 | Login throttle bypass | Fixed | Per-username throttle plus per-IP login limiter |
+| 4 | Weak JWT secret | Fixed | Production refuses to start with a missing/short secret |
+| 5 | Open CORS | Fixed | Same-origin by default |
+| 6 | Missing browser security headers | Fixed | CSP, HSTS, Permissions-Policy, COOP, no-sniff, frame deny |
+| 7 | Username enumeration by timing | Fixed | Constant-time dummy hash compare |
+| 8 | PDF links | Fixed | Signed, expiring, scoped tokens |
+| 9 | CSV formula injection | Fixed | Cells starting with = + - @ are neutralised |
+| 10 | Container ran as root | Fixed | `USER node`; DB not published; compose requires DB_PASSWORD |
+| 11 | Evolution API key readable/plaintext | Fixed | AES-256-GCM at rest (DATA_ENCRYPTION_KEY), masked in API/UI |
+| 12 | 8h token, no revocation | Fixed | Server-side sessions: logout, logout-everywhere, revoked on password change/reset/MFA reset; idle timeout (60 min prod) and 30 min browser auto-logout |
+| 13 | No MFA | Fixed | TOTP (Google/Microsoft Authenticator) with QR; replay-protected; `MFA_REQUIRED_ROLES` makes it mandatory per role; admin reset |
+| 14 | Weak password rules | Fixed | 10+ chars, letters+numbers, no common/username; admin-set passwords force change at next login |
+| 15 | No global rate limiting | Fixed | 600 req/min/IP in production (tunable), 60/min on public links |
+| 16 | Audit log could be edited | Fixed | Hash-chained, append-only (DB triggers block UPDATE/DELETE); `GET /api/admin/audit-verify` proves integrity |
+| 17 | Admin-set URLs (SSRF) | Fixed | https only in production, blocks private/metadata addresses, no embedded credentials |
+| 18 | `/health` leaked internals | Fixed | Returns only `{ok:true}` |
+| 19 | Offline cache kept patient data | Fixed | Cleared on login, logout and session expiry; auto-logout when idle |
+| 20 | No HTTPS / backups | Provided | `deploy/` Caddy (auto TLS) overlay, encrypted nightly `backup.sh`, `npm run prod:check` pre-flight |
+| 21 | Frontend `npm audit` | Accepted | Only build-time tooling (nuxt dev deps); nothing vulnerable ships to browsers. Backend: 0 vulnerabilities |
+| 22 | n8n shared secret lives in the workflow's Config node | Open (low) | Only n8n admins can read it. Hardening: create an n8n "Header Auth" credential and select it on the 4 webhook nodes; keep `N8N_WEBHOOK_SECRET` equal |
+
+Still your responsibility (cannot be done in code): run behind HTTPS, set the env values in `.env`, restrict server SSH/firewall, off-site copy of backups and a monthly restore test, keep Docker/OS patched, and make sure users keep their authenticator phones safe.
+
 ## 1. Summary
 | # | Finding | Severity | Status |
 |---|---|---|---|

@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: hms
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-hms_pass}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       POSTGRES_DB: qatar_hms
     volumes:
       - hms_pgdata:/var/lib/postgresql/data
@@ -23,9 +23,14 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://hms:${DB_PASSWORD:-hms_pass}@db:5432/qatar_hms
+      DATABASE_URL: postgres://hms:${DB_PASSWORD:?Set DB_PASSWORD in .env}@db:5432/qatar_hms
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (copy .env.example)}
-      DEMO_DATA: ${DEMO_DATA:-true}
+      DEMO_DATA: ${DEMO_DATA:-false}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-}
+      N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:-}
+      MFA_REQUIRED_ROLES: ${MFA_REQUIRED_ROLES:-}
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
     ports:
       - "${APP_PORT:-4000}:4000"
 

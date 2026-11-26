@@ -218,6 +218,7 @@ async function main() {
         username, full_name, email: `${username}@demo.local`, role_id: roleId[role], password_hash: pass,
         department_id: d ? dept[d] : null, speciality_id: sp ? spec[sp] : null, licence_no: lic || null,
         licence_expiry: lic ? '2028-12-31' : null, active: true,
+        must_change_password: process.env.NODE_ENV === 'production',
       });
     }
     for (const username of ['drsara', 'drravi', 'drdental']) {

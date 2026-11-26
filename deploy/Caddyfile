@@ -1,0 +1,6 @@
+# HTTPS reverse proxy (automatic Let's Encrypt). Replace the domain. Run:  docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d
+hms.yourcentre.qa {
+	encode zstd gzip
+	reverse_proxy app:4000
+	header -Server
+}

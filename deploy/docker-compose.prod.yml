@@ -1,0 +1,18 @@
+# Production overlay: adds Caddy (TLS) and closes the app/db ports to the outside world.
+services:
+  app:
+    ports: !reset []
+    environment:
+      NODE_ENV: production
+      TRUST_PROXY: "1"
+      PUBLIC_BASE_URL: https://hms.yourcentre.qa
+      MFA_REQUIRED_ROLES: "Super Admin,Accountant"
+      # JWT_SECRET, DATA_ENCRYPTION_KEY, N8N_WEBHOOK_SECRET, DB password: put them in .env (never commit)
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes: ["./deploy/Caddyfile:/etc/caddy/Caddyfile:ro", "caddy_data:/data"]
+    depends_on: [app]
+volumes:
+  caddy_data:

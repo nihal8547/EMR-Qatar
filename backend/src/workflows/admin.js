@@ -8,6 +8,18 @@ const { wrap, bad, notFound, conflict, need, audit } = require('../lib');
 
 const router = express.Router();
 
+/** Verify the audit-log hash chain; returns the first broken rows, if any. */
+router.get('/admin/audit-verify', need('audit_log.view'), wrap(async (req, res) => {
+  const { rows } = await db.query(`
+    SELECT id FROM (
+      SELECT id, prev_hash, row_hash, lag(row_hash) OVER (ORDER BY id) AS lh,
+             "admin"."audit_row_hash"(prev_hash, id, username, action, resource, record_id, ip, details::text, created_by) AS calc
+        FROM "admin"."audit_log") t
+     WHERE row_hash IS NULL OR row_hash <> calc OR prev_hash IS DISTINCT FROM coalesce(lh,'GENESIS') ORDER BY id LIMIT 20`);
+  const total = (await db.query(`SELECT count(*)::int AS n FROM "admin"."audit_log"`)).rows[0].n;
+  res.json({ ok: rows.length === 0, checked: total, broken_ids: rows.map((r) => r.id) });
+}));
+
 router.get('/admin/matrix', need('admin.roles'), wrap(async (req, res) => {
   const roles = (await db.query(`SELECT id, name, description FROM "auth"."roles" WHERE is_deleted=false ORDER BY id`)).rows;
   const rp = (await db.query(`SELECT role_id, perm_code FROM "auth"."role_permissions"`)).rows;

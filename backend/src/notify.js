@@ -113,6 +113,7 @@ async function log(client, status, reference, message) {
 /** Sends one event to n8n and waits for n8n's answer. Returns { ok, status, detail }. */
 async function deliver(payload) {
   const cfg = await settings();
+  if (cfg.base && !process.env.N8N_WEBHOOK_BASE) { try { require('./security').assertSafeUrl(cfg.base, 'n8n URL'); } catch (e) { return { ok: false, status: 'blocked', detail: e.message }; } }
   if (!cfg.base) return { ok: false, status: 'not-configured', detail: 'n8n webhook URL is not set (setting n8n_webhook_base)' };
   if (!cfg.secret) return { ok: false, status: 'not-configured', detail: 'N8N_WEBHOOK_SECRET is not set on the server' };
   if (!cfg.publicBase && payload.documents.length) return { ok: false, status: 'not-configured', detail: 'public_base_url is not set (needed for PDF links)' };

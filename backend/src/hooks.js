@@ -23,8 +23,11 @@ const H = {
     const m = { ...(ctx.existing || {}), ...d };
     if (d.username) d.username = String(d.username).toLowerCase().replace(/\s+/g, '');
     if (d.password) {
-      if (String(d.password).length < 8) throw bad('Password must be at least 8 characters');
+      const pp = require('./security').passwordProblem(d.password, m.username);
+      if (pp) throw bad(pp);
       d.password_hash = await bcrypt.hash(String(d.password), 10);
+      if (!ctx.existing || ctx.existing.id !== ctx.user.id) d.must_change_password = true; // admin-set/reset: user must choose their own
+      require('./auth').revokeUserSessions(ctx.existing && ctx.existing.id, ctx.client);
     }
     delete d.password;
     // privilege-escalation guards

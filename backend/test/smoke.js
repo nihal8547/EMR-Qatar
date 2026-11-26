@@ -539,7 +539,7 @@ const section = (t) => console.log(`\n== ${t}`);
 
   section('Server robustness');
   const hl = await call(null, 'GET', '/health');
-  ok('health check reports db latency', hl.status === 200 && hl.data.ok && typeof hl.data.db_ms === 'number', hl.data);
+  ok('health check is minimal (no internals leaked)', hl.status === 200 && hl.data.ok && Object.keys(hl.data).length === 1, hl.data);
   const big = await call(tk.admin, 'POST', '/r/patients', { full_name: 'x'.repeat(3 * 1024 * 1024) });
   ok('oversized body is refused cleanly (413)', big.status === 413, big.status);
   ok('unknown API path is a clean 404', (await call(tk.admin, 'GET', '/nope/nothing')).status === 404);

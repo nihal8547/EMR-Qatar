@@ -64,3 +64,13 @@ Access: 14 roles, permissions per resource (view/create/edit/delete) plus specia
 - Pages and records you opened recently stay readable offline (last 400 answers). They are wiped at logout.
 - New patients and vitals can be entered offline: they are kept on the device and sent automatically when the connection returns (bar at the top shows the queue, with Send now / Retry / Discard). Anything rejected by the server (e.g. duplicate QID) stays in the list for a person to fix.
 - Payments, refunds, day close, results, billing etc. need a live connection and say so clearly; nothing is queued for them on purpose.
+
+
+## Going live (production checklist)
+
+1. `cp .env.example .env` and fill `JWT_SECRET`, `DATA_ENCRYPTION_KEY`, `DB_PASSWORD` (`openssl rand -base64 48`), `PUBLIC_BASE_URL`, `TRUST_PROXY=1`, `MFA_REQUIRED_ROLES`.
+2. Edit the domain in `deploy/Caddyfile`, then `docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d --build` (automatic HTTPS).
+3. Read the generated admin password from the first start log (`docker compose logs app | grep "Demo password"`); every seeded user must change it at first login. Turn on two-factor for admins on *My account*.
+4. `cd backend && NODE_ENV=production npm run prod:check` – every line should say PASS.
+5. Schedule `deploy/backup.sh` (cron) and test a restore.
+6. Security details: `SECURITY_REPORT.md`. Tests: `npm test`, `node test/security.js`, `node test/auth.js`, `node test/scope.js`, `node test/notify.js`.

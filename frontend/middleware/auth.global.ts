@@ -11,6 +11,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     try { await load() } catch { localStorage.removeItem(TOKEN_KEY); return navigateTo('/login') }
   }
   const u = state.value.user
+  if ((u?.must_change_password || u?.mfa_required) && to.path !== '/account') return navigateTo('/account')
   if (u?.isPortal && to.path !== '/portal') return navigateTo('/portal')
   const need = to.meta.perm as string | undefined
   if (need && !can(need)) return navigateTo(u?.isPortal ? '/portal' : '/forbidden')

@@ -34,11 +34,15 @@ app.use((req, res, next) => {
 // Same-origin by default (the app and API are served together). Set CORS_ORIGIN=https://a.example,https://b.example to allow others.
 app.use(cors({ origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : false }));
 app.use(express.json({ limit: '2mb' }));
+// global per-IP rate limit (on by default in production; RATE_LIMIT_PER_MIN=0 disables). Login has its own per-user throttle.
+const RPM = Number(process.env.RATE_LIMIT_PER_MIN || (process.env.NODE_ENV === 'production' ? 600 : 0));
+if (RPM) app.use('/api', require('./security').rateLimit({ max: RPM }));
+app.use('/api/auth/login', require('./security').rateLimit({ max: Number(process.env.LOGIN_RATE_PER_MIN || 30), windowMs: 60000 }));
+app.use('/api/public', require('./security').rateLimit({ max: 60 }));
 
 app.get('/api/health', wrap(async (req, res) => {
-  const t0 = Date.now();
   await db.query('SELECT 1');
-  res.json({ ok: true, time: new Date().toISOString(), db_ms: Date.now() - t0, uptime_s: Math.round(process.uptime()) });
+  res.json({ ok: true });
 }));
 
 app.use('/api/auth', auth.router);
@@ -116,6 +120,7 @@ app.use((err, req, res, next) => {
 const PORT = Number(process.env.PORT || 4000);
 if (require.main === module) {
   db.assertDedicatedDb().catch((e) => { console.error(e.message); process.exit(1); });
+  setInterval(() => db.query(`DELETE FROM "auth"."sessions" WHERE expires_at < now() - interval '7 days' OR (revoked AND last_seen < now() - interval '7 days')`).catch(() => {}), 6 * 3600 * 1000).unref();
   const server = app.listen(PORT, () => console.log(`Qatar HMS API listening on http://localhost:${PORT}`));
   server.keepAliveTimeout = 65000; server.headersTimeout = 66000; server.requestTimeout = 60000;
   process.on('unhandledRejection', (e) => console.error('[process] unhandledRejection:', e));

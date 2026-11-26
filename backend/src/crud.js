@@ -112,6 +112,44 @@ async function fetchOne(clientOrPool, res, id) {
 
 const maskSecret = (row) => { if (row && row.key === 'evolution_api_key' && row.value) row.value = '••••••••'; };
 
+/* ---------- record scoping for roles flagged "restrict to own patients" (Doctor, Nurse) ----------
+   A patient's clinical records are visible only if the user treated the patient (doctors) / the patient has an open visit today (nurses),
+   otherwise a break-glass reason (8+ chars) is required for reads and is written to the audit log. Writes are never allowed on break-glass. */
+const SCOPE_EXEMPT = new Set(['patients', 'appointments']);
+function scopeKind(r) {
+  if (SCOPE_EXEMPT.has(r.key)) return null;
+  if (r.fields.some((f) => f.name === 'patient_id')) return 'patient';
+  if (r.fields.some((f) => f.name === 'visit_id')) return 'visit';
+  return null;
+}
+function relationSQL(user, patientExpr, params) {
+  params.push(user.id);
+  const nd = user.role_name !== 'Doctor' ? ` OR (sv.visit_date = CURRENT_DATE AND sv.status NOT IN ('Completed','Cancelled'))` : '';
+  return `EXISTS (SELECT 1 FROM scheduling.visits sv WHERE sv.patient_id = ${patientExpr} AND sv.is_deleted = false AND (sv.doctor_id = $${params.length}${nd}))`;
+}
+function scopeSQL(user, alias, kind, params) {
+  const pe = kind === 'patient' ? `${alias}."patient_id"` : `(SELECT v2.patient_id FROM scheduling.visits v2 WHERE v2.id = ${alias}."visit_id")`;
+  return relationSQL(user, pe, params);
+}
+/** Throws unless the (restricted) user may see this patient. Use for any endpoint that returns a patient's clinical data. */
+async function assertPatientAccess(req, patientId, opts = {}) {
+  if (!req.user.restrict || !patientId) return;
+  const params = [];
+  const sql = relationSQL(req.user, '$2', params);
+  const ok = (await db.query(`SELECT ${sql} AS ok`.replace('$2', `$${params.length + 1}`), [...params, patientId])).rows[0].ok;
+  if (ok) return;
+  const reason = String(req.query.breakglass || '').trim();
+  if (opts.write || reason.length < 8) throw new HttpError(403, opts.write ? 'This patient is not under your care' : 'BREAKGLASS_REQUIRED', opts.write ? undefined : { breakglass: true });
+  await audit(null, req.user, 'BREAK_GLASS', 'patients', patientId, { reason, via: req.path }, req.ip);
+}
+async function assertRecordAccess(req, r, row, opts = {}) {
+  const kind = req.user.restrict ? scopeKind(r) : null;
+  if (!kind || !row) return;
+  let pid = row.patient_id;
+  if (kind === 'visit') pid = (await db.query(`SELECT patient_id FROM scheduling.visits WHERE id=$1`, [row.visit_id])).rows[0]?.patient_id;
+  await assertPatientAccess(req, pid, opts);
+}
+
 /* ---------- list ---------- */
 function buildWhere(res, query) {
   const where = ['t."is_deleted" = false'];
@@ -161,11 +199,15 @@ function patientSearchSQL(res, alias, p) {
   return ` OR EXISTS (SELECT 1 FROM mpi.patients sp WHERE sp.id = ${alias}."patient_id" AND (sp.mrn ILIKE ${p} OR sp.full_name ILIKE ${p} OR sp.qid ILIKE ${p} OR sp.phone ILIKE ${p}))`;
 }
 
-async function list(res, query) {
+async function list(res, query, user) {
   const limit = Math.min(Math.max(parseInt(query.limit || '25', 10) || 25, 1), query.format === 'csv' ? 20000 : 200);
   const page = Math.max(parseInt(query.page || '1', 10) || 1, 1);
   const s = selectSQL(res);
-  const { where, params } = buildWhere(res, query);
+  const built = buildWhere(res, query);
+  const params = built.params;
+  let where = built.where;
+  const kind = user && user.restrict ? scopeKind(res) : null;
+  if (kind) where += ` AND ${scopeSQL(user, 't', kind, params)}`;
   let order = res.orderBy;
   if (query.sort) {
     const f = res.fields.find((x) => x.name === query.sort && !x.secret);
@@ -264,7 +306,7 @@ router.get('/lookup/:key', wrap(async (req, res) => {
 router.get('/r/:key', wrap(async (req, res) => {
   const r = getRes(req.params.key);
   if (!can(req, `${r.key}.view`)) throw forbidden();
-  const out = await list(r, req.query);
+  const out = await list(r, req.query, req.user);
   if (r.key === 'settings') out.rows.forEach(maskSecret);
   if (req.query.format === 'csv') {
     const cols = r.fields.filter((f) => !f.secret && f.type !== 'password');
@@ -289,6 +331,7 @@ router.get('/r/:key/:id', wrap(async (req, res) => {
   if (!can(req, `${r.key}.view`)) throw forbidden();
   const row = await fetchOne(db, r, Number(req.params.id));
   if (!row) throw notFound();
+  await assertRecordAccess(req, r, row);
   if (r.key === 'settings') maskSecret(row);
   res.json(row);
 }));
@@ -301,13 +344,14 @@ router.get('/print/:key/:id', wrap(async (req, res) => {
   if (!Number.isInteger(id) || id < 1 || id > 2147483647) throw notFound();
   const row = await fetchOne(db, r, id);
   if (!row) throw notFound();
+  await assertRecordAccess(req, r, row);
   const vis = (res_) => res_.fields.filter((f) => !f.hidden && !f.secret && f.type !== 'password' && !['created_by', 'updated_by'].includes(f.name));
   const fields = vis(r).map((f) => ({ name: f.name, label: f.label, type: f.type }));
   const children = [];
   for (const c of r.children || []) {
     const cr = reg.resources[c.res];
     if (!cr || !can(req, `${cr.key}.view`)) continue;
-    const out = await list(cr, { [c.fk]: String(id), limit: '200' });
+    const out = await list(cr, { [c.fk]: String(id), limit: '200' }, req.user);
     children.push({ key: cr.key, label: c.label || cr.label, fields: vis(cr).filter((f) => f.list && f.name !== c.fk).map((f) => ({ name: f.name, label: f.label, type: f.type })), rows: out.rows });
   }
   let patient = null;
@@ -350,6 +394,7 @@ router.post('/r/:key', wrap(async (req, res) => {
       if (!v.rows.length) throw bad('Visit not found');
       data.patient_id = v.rows[0].patient_id;
     }
+    if (req.user.restrict && scopeKind(r) && data.patient_id) await assertPatientAccess(req, data.patient_id, { write: true });
     await hooks.run(r.hooks.before, ctx);
     let newId;
     try { newId = await insertRow(client, r, data, req.user); } catch (e) { throw errorFromPg(e); }
@@ -372,6 +417,7 @@ router.put('/r/:key/:id', wrap(async (req, res) => {
   await db.tx(async (client) => {
     const existing = await fetchOne(client, r, id);
     if (!existing) throw notFound();
+    await assertRecordAccess(req, r, existing, { write: true });
     if (r.key === 'settings' && existing.key === 'evolution_api_key') throw forbidden('Change the Evolution API key on the WhatsApp Connect page');
     const data = prepare(r, req.body, 'update');
     const ctx = { res: r, data, user: req.user, client, mode: 'update', existing, body: req.body, query: req.query, id };
@@ -403,6 +449,7 @@ router.delete('/r/:key/:id', wrap(async (req, res) => {
   await db.tx(async (client) => {
     const existing = await fetchOne(client, r, id);
     if (!existing) throw notFound();
+    await assertRecordAccess(req, r, existing, { write: true });
     if (r.key === 'users') await hooks.run('userDeleteGuard', { client, user: req.user, row: existing });
     await client.query(`UPDATE ${fq(r)} SET "is_deleted" = true, "updated_at" = now(), "updated_by" = $1 WHERE "id" = $2`, [req.user.id, id]);
     await hooks.run(r.hooks.after, { res: r, user: req.user, client, row: existing, action: 'delete', id });
@@ -422,6 +469,7 @@ router.post('/r/:key/:id/action/:name', wrap(async (req, res) => {
   const out = await db.tx(async (client) => {
     const row = await fetchOne(client, r, id);
     if (!row) throw notFound();
+    await assertRecordAccess(req, r, row, { write: true });
     const result = await handler({ client, user: req.user, row, id, body: req.body });
     await audit(client, req.user, `ACTION:${a.name}`, r.key, id, null, req.ip);
     return result;
@@ -429,4 +477,4 @@ router.post('/r/:key/:id/action/:name', wrap(async (req, res) => {
   res.json({ ok: true, ...(out || {}), record: await fetchOne(db, r, id) });
 }));
 
-module.exports = { router, fetchOne, selectSQL, list, fq, q, getRes, dispExpr };
+module.exports = { router, fetchOne, selectSQL, list, fq, q, getRes, dispExpr, assertPatientAccess };

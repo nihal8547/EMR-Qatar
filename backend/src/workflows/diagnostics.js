@@ -2,6 +2,7 @@
 /** Laboratory + Radiology workflows */
 const express = require('express');
 const db = require('../db');
+const crud = require('../crud');
 const { wrap, bad, notFound, conflict, need, can, audit } = require('../lib');
 
 const router = express.Router();
@@ -171,6 +172,7 @@ router.get('/lab/orders/:id/report', need('lab_orders.view'), wrap(async (req, r
     `SELECT o.*, p.mrn, p.full_name, p.dob, p.gender, p.qid, d.full_name AS doctor, d.licence_no AS doctor_licence
        FROM "lab"."lab_orders" o JOIN "mpi"."patients" p ON p.id=o.patient_id LEFT JOIN "auth"."users" d ON d.id=o.doctor_id WHERE o.id=$1 AND o.is_deleted=false`, [id])).rows[0];
   if (!o) throw notFound('Order not found');
+  await crud.assertPatientAccess(req, o.patient_id);
   const items = (await db.query(
     `SELECT t.name AS test, t.unit, t.ref_low, t.ref_high, i.result_value, i.result_text, i.flag, i.validated_at, u.full_name AS validated_by
        FROM "lab"."lab_order_items" i JOIN "lab"."lab_tests" t ON t.id=i.test_id LEFT JOIN "auth"."users" u ON u.id=i.validated_by
@@ -184,11 +186,12 @@ router.get('/lab/orders/:id/report', need('lab_orders.view'), wrap(async (req, r
 router.get('/imaging/orders/:id/report', need('imaging_orders.view'), wrap(async (req, res) => {
   const id = Number(req.params.id);
   const o = (await db.query(
-    `SELECT o.id, o.order_no, o.status, o.priority, o.clinical_info, o.ordered_at, o.visit_id, s.name AS study, m.name AS modality,
+    `SELECT o.id, o.order_no, o.status, o.priority, o.clinical_info, o.ordered_at, o.visit_id, o.patient_id, s.name AS study, m.name AS modality,
             p.mrn, p.full_name, p.dob, p.gender, p.qid, d.full_name AS doctor
        FROM "radiology"."imaging_orders" o JOIN "billing"."services" s ON s.id=o.service_id LEFT JOIN "radiology"."imaging_modalities" m ON m.id=o.modality_id
        JOIN "mpi"."patients" p ON p.id=o.patient_id LEFT JOIN "auth"."users" d ON d.id=o.doctor_id WHERE o.id=$1 AND o.is_deleted=false`, [id])).rows[0];
   if (!o) throw notFound('Order not found');
+  await crud.assertPatientAccess(req, o.patient_id);
   const reports = (await db.query(
     `SELECT r.findings, r.impression, r.status, r.reported_at, u.full_name AS reported_by FROM "radiology"."imaging_reports" r LEFT JOIN "auth"."users" u ON u.id=r.reported_by
       WHERE r.order_id=$1 AND r.is_deleted=false ORDER BY r.id DESC`, [id])).rows;
@@ -201,9 +204,10 @@ router.get('/imaging/orders/:id/report', need('imaging_orders.view'), wrap(async
 router.get('/visits/:id/results', need('lab_orders.view'), wrap(async (req, res) => {
   const vid = Number(req.params.id);
   const v = (await db.query(
-    `SELECT v.id, v.visit_no, v.visit_date, v.visit_type, p.mrn, p.full_name, p.dob, p.gender, p.qid, d.full_name AS doctor
+    `SELECT v.id, v.patient_id, v.visit_no, v.visit_date, v.visit_type, p.mrn, p.full_name, p.dob, p.gender, p.qid, d.full_name AS doctor
        FROM "scheduling"."visits" v JOIN "mpi"."patients" p ON p.id=v.patient_id LEFT JOIN "auth"."users" d ON d.id=v.doctor_id WHERE v.id=$1 AND v.is_deleted=false`, [vid])).rows[0];
   if (!v) throw notFound('Visit not found');
+  await crud.assertPatientAccess(req, v.patient_id);
   const lab = (await db.query(
     `SELECT o.order_no, t.name AS test, t.unit, t.ref_low, t.ref_high, i.result_value, i.result_text, i.flag, i.validated_at
        FROM "lab"."lab_orders" o JOIN "lab"."lab_order_items" i ON i.order_id=o.id AND i.status='Validated' AND i.is_deleted=false JOIN "lab"."lab_tests" t ON t.id=i.test_id

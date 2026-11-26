@@ -89,6 +89,7 @@ module.exports = (R, Alias) => {
     'licence_no:text:DHP licence no',
     'licence_expiry:date:Licence expiry:list',
     'patient_id:ref=patients:Linked patient (portal users only)',
+    'must_change_password:bool:Must change password at next login:def=false',
     'active:bool:Active:list,def=true',
     'last_login:datetime::ro,list',
   ], { schema: 'auth', disp: ['full_name'], hooks: { before: 'userBefore' } });
