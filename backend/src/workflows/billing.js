@@ -101,7 +101,8 @@ async function removeChargeTx(client, req, id, reason) {
     if (c.status === 'Invoiced') {
       inv = (await client.query(`SELECT * FROM "billing"."invoices" WHERE id=$1`, [c.invoice_id])).rows[0];
       if (!inv || inv.status === 'Cancelled') throw conflict('The invoice is cancelled');
-      if (Number(inv.paid) > 0.005) throw conflict('This bill already has a payment. Use "Request bill cancel" (refund) instead.');
+      if (Number(inv.paid) > 0.005 && !req.user.perms.has('bill_cancel_requests.approve')) throw conflict('This bill already has a payment. Only a cashier manager can remove a single item from a paid bill (the difference is refunded); otherwise use "Request bill cancel".');
+      if (Number(inv.paid) > 0.005) await billing.assertDayOpen(client);
       if (inv.payer_type !== 'Cash' && (await client.query(`SELECT 1 FROM "insurance"."claims" WHERE invoice_id=$1 AND is_deleted=false LIMIT 1`, [inv.id])).rows.length) throw conflict('A claim exists for this invoice');
     }
     if (c.source === 'Lab') {
@@ -124,16 +125,47 @@ async function removeChargeTx(client, req, id, reason) {
         if (o.status !== 'Ordered') throw conflict('The procedure is already done');
         await client.query(`UPDATE "clinical"."procedure_orders" SET status='Cancelled', updated_at=now() WHERE id=$1`, [c.source_id]);
       }
-    } else if (c.source !== 'Manual') throw conflict(`${c.source} items cannot be removed here`);
+    } else if (c.source === 'Consultation') {
+      /* consultation fee: only the charge is cancelled, the visit itself stays */
+    } else if (c.source === 'Pharmacy') throw conflict('Medicines are already dispensed: return them through Pharmacy (dispense return) instead');
+    else if (c.source === 'Dental') throw conflict('This dental treatment is already completed on the chart, so its charge cannot be removed here');
+    else if (c.source !== 'Manual') throw conflict(`${c.source} items cannot be removed here`);
     await client.query(`UPDATE "billing"."charges" SET status='Cancelled', updated_at=now() WHERE id=$1`, [id]);
     await audit(client, req.user, 'CHARGE_REMOVE', 'charges', id, { reason, source: c.source, description: c.description, amount: c.amount, invoice_id: c.invoice_id }, req.ip);
+    let refunded = 0;
     if (inv) {
       const left = (await client.query(`SELECT COUNT(*)::int n FROM "billing"."charges" WHERE invoice_id=$1 AND is_deleted=false AND status <> 'Cancelled'`, [inv.id])).rows[0].n;
       if (!left) await client.query(`UPDATE "billing"."invoices" SET status='Cancelled', notes=COALESCE(notes||' · ','')||$2, updated_at=now() WHERE id=$1`, [inv.id, `All items removed: ${reason}`]);
       else await billing.createOrRefreshInvoice(client, req.user, c.visit_id, {});
+      if (Number(inv.paid) > 0.005) refunded = await refundExcess(client, req, inv.id, reason);
     }
     await billing.settleVisit(client, c.visit_id);
-    return { visit_id: c.visit_id };
+    return { visit_id: c.visit_id, refunded };
+}
+
+/** After an item is removed from a paid bill: give back whatever the patient paid above the new total, newest payment first. */
+async function refundExcess(client, req, invoiceId, reason) {
+  const inv = (await client.query(`SELECT * FROM "billing"."invoices" WHERE id=$1`, [invoiceId])).rows[0];
+  const target = inv.status === 'Cancelled' ? 0 : Number(inv.patient_share);
+  const st = await billing.refreshInvoice(client, invoiceId);
+  let excess = round2(st.paid - target);
+  if (excess <= 0.005) return 0;
+  const session = (await client.query(`SELECT id FROM "billing"."cashier_sessions" WHERE user_id=$1 AND status='Open' AND is_deleted=false ORDER BY id DESC LIMIT 1`, [req.user.id])).rows[0];
+  const pays = (await client.query(`SELECT * FROM "billing"."payments" WHERE invoice_id=$1 AND kind='Payment' AND is_deleted=false ORDER BY id DESC`, [invoiceId])).rows;
+  let done = 0;
+  for (const p of pays) {
+    if (excess <= 0.005) break;
+    if (p.method === 'Deposit') throw conflict('Part of this bill was paid from a deposit: ask for a full bill cancel request instead');
+    if (p.method === 'Cash' && !session) throw conflict('Open your cashier session first: the cash goes back to the patient from your drawer');
+    const take = round2(Math.min(excess, Number(p.amount)));
+    const code = await db.nextCode(client, 'RCP', 6);
+    await client.query(
+      `INSERT INTO "billing"."payments"("receipt_no","invoice_id","patient_id","kind","amount","method","reference","cashier_id","session_id","paid_at","created_by","updated_by")
+       VALUES ($1,$2,$3,'Refund',$4,$5,$6,$7,$8,now(),$7,$7)`, [code, invoiceId, p.patient_id, take, p.method, `ITEM REMOVED: ${reason}`.slice(0, 120), req.user.id, session ? session.id : null]);
+    excess = round2(excess - take); done = round2(done + take);
+  }
+  await billing.refreshInvoice(client, invoiceId);
+  return done;
 }
 
 /** Remove a test / study / procedure the patient does not want. Cancels the order too, if it has not started. */

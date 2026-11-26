@@ -142,6 +142,7 @@ const section = (t) => console.log(`\n== ${t}`);
   ok('dispensed with FEFO batch after payment', disp.status === 200 && disp.data.payment && disp.data.payment.amount > 0, disp.data);
   ok('dispense slip payload', (await call(tk.pharmacist, 'GET', `/pharmacy/dispenses/${disp.data.dispense_id}/print`)).data.items.length > 0);
 
+  let cashRefund = 0;
   section('Billing');
   const bw = await call(tk.cashier, 'GET', '/billing/worklist');
   ok('cashier worklist', bw.status === 200 && Array.isArray(bw.data.rows) && typeof bw.data.total === 'number', bw.data);
@@ -165,7 +166,17 @@ const section = (t) => console.log(`\n== ${t}`);
   const p2 = await call(tk.cashier, 'POST', `/billing/invoices/${invId}/pay`, { amount: Math.round((net - half) * 100) / 100, method: 'Card', reference: 'TEST-CARD' });
   ok('balance paid by card', p2.status === 200 && p2.data.bundle.invoice.status === 'Paid', p2.data);
   ok('visit closed after full payment', ['Completed'].includes((await call(tk.cashier, 'GET', `/billing/visit/${vid}`)).data.visit.status));
-  const cs = await call(tk.cashier, 'POST', '/billing/session/close', { closing_cash: 100 + half });
+  { // single item removal from a PAID bill: item cancelled, difference refunded
+    const paidInv = (await call(tk.cashier, 'GET', `/billing/invoices/${invId}`)).data;
+    const line = (paidInv.lines || []).find((l) => l.source === 'Consultation' || l.source === 'Manual');
+    if (line && (paidInv.lines || []).length > 1) {
+      const rm = await call(tk.cashier, 'POST', `/billing/charges/${line.id}/remove`, { reason: 'patient declined' });
+      const after = (await call(tk.cashier, 'GET', `/billing/invoices/${invId}`)).data.invoice;
+      cashRefund = Math.max(0, Math.round((Number(rm.data.refunded) - (net - half)) * 100) / 100);
+      ok('one item removed from a paid bill and refund posted', rm.status === 200 && rm.data.refunded > 0 && after.status === 'Paid' && Math.abs(Number(after.balance)) < 0.01, { rm: rm.data, after });
+    }
+  }
+  const cs = await call(tk.cashier, 'POST', '/billing/session/close', { closing_cash: 100 + half - cashRefund });
   ok('cashier session closed with zero variance', cs.status === 200 && Number(cs.data.variance) === 0, cs.data);
 
   section('Bill cancel request / approval');
@@ -389,7 +400,6 @@ const section = (t) => console.log(`\n== ${t}`);
   const labCh = rb.data.pending.filter((c) => c.source === 'Lab'); const conCh = rb.data.pending.find((c) => c.source === 'Consultation');
   ok('two lab charges pending', labCh.length === 2, rb.data.pending);
   ok('reason is required to remove', (await call(tk.reception, 'POST', `/billing/charges/${labCh[0].id}/remove`, {})).status === 400);
-  if (conCh) ok('consultation fee cannot be removed here', (await call(tk.reception, 'POST', `/billing/charges/${conCh.id}/remove`, { reason: 'test' })).status === 409);
   ok('lab role cannot remove charges (403)', (await call(tk.lab, 'POST', `/billing/charges/${labCh[0].id}/remove`, { reason: 'test' })).status === 403);
   ok('pending lab charge removed', (await call(tk.reception, 'POST', `/billing/charges/${labCh[0].id}/remove`, { reason: 'Patient declined' })).status === 200);
   rb = await call(tk.reception, 'GET', `/billing/visit/${rv.data.id}`);
@@ -404,6 +414,7 @@ const section = (t) => console.log(`\n== ${t}`);
   const rinv2 = await call(tk.reception, 'GET', `/billing/invoices/${rinv.data.invoice.id}`);
   ok('invoice total reduced after removal', Number(rinv2.data.invoice.gross) < grossBefore, rinv2.data.invoice);
   ok('the lab order is cancelled once no tests remain', ((await call(tk.admin, 'GET', `/r/lab_orders/${rlo.data.id}`)).data.status) === 'Cancelled');
+  if (conCh) { const rc = await call(tk.reception, 'POST', `/billing/charges/${conCh.id}/remove`, { reason: 'Free review' }); ok('consultation fee can be removed from an unpaid bill', rc.status === 200, rc.data); }
 
   section('Walk-in (outside) lab tests and X-rays');
   ok('walk-in needs permission (doctor 403)', (await call(tk.drsara, 'POST', '/walkin', {})).status === 403);

@@ -11,16 +11,16 @@ const chip = ref('all')
 const CHIPS: [string, string][] = [['all', 'All'], ['due', 'Has dues'], ['Lab', 'Lab tests'], ['Radiology', 'X-ray / Imaging'], ['Consultation', 'Consultation'], ['Procedure', 'Procedures'], ['Pharmacy', 'Pharmacy']]
 const total = ref(0); const page = ref(1); const loadingList = ref(false)
 const bySource = computed(() => { const o: Record<string, number> = {}; for (const c of d.value?.pending || []) o[c.source] = (o[c.source] || 0) + Number(c.amount); return o })
-const REMOVABLE = ['Lab', 'Radiology', 'Procedure', 'Manual']
 async function removeItem(c: any) {
   const reason = prompt(`Remove "${c.description}" from this bill?\nThe ${c.source === 'Manual' ? 'charge' : 'test / order'} is cancelled too, if not started.\n\nReason (e.g. patient declined):`); if (!reason) return
-  if (await run(() => api(`/billing/charges/${c.id}/remove`, { method: 'POST', body: { reason } }), 'Item removed')) { await Promise.all([loadVisit(), loadList()]) }
+  const r: any = await run(() => api(`/billing/charges/${c.id}/remove`, { method: 'POST', body: { reason } }), 'Item removed')
+  if (r) { if (r.refunded > 0) alert(`Item removed. Refund to give the patient: ${money(r.refunded)}`); await Promise.all([loadVisit(), loadList()]) }
 }
 const items = computed(() => [
   ...(d.value?.invoice?.lines || []).map((l: any) => ({ ...l, billed: true })),
   ...(d.value?.pending || []).map((c: any) => ({ ...c, billed: false })),
 ])
-const canRemove = (c: any) => REMOVABLE.includes(c.source) && !(c.billed && Number(inv.value?.paid) > 0.005) && inv.value?.status !== 'Cancelled'
+const canRemove = (c: any) => !(c.billed && Number(inv.value?.paid) > 0.005 && !can('bill_cancel_requests.approve')) && inv.value?.status !== 'Cancelled'
 async function quickCollect() {
   busy.value = true
   try {
