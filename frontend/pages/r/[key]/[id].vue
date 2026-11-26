@@ -106,6 +106,12 @@ const statusField = computed(() => fields.value.find((f) => f.name === 'status')
         <NuxtLink v-if="key === 'patients' && can('patients.360')" :to="`/patient/${idParam}`" class="btn">Patient 360</NuxtLink>
         <NuxtLink v-if="key === 'visits' && can('visits.manage')" :to="`/visit-manage?visit=${idParam}`" class="btn">⚙ Manage visit</NuxtLink>
         <NuxtLink v-if="key === 'invoices'" :to="`/print/invoice/${idParam}`" class="btn">🖨 Print invoice</NuxtLink>
+        <WhatsAppBtn v-if="key === 'invoices' && model.visit_id" type="bill" :payload="{ visit_id: model.visit_id }" label="📲 Send bill" />
+        <WhatsAppBtn v-if="key === 'lab_orders' && model.status === 'Validated'" type="result" :payload="{ lab_order_id: Number(idParam) }" label="📲 Send result" />
+        <WhatsAppBtn v-if="key === 'imaging_orders' && model.status === 'Reported'" type="result" :payload="{ imaging_order_id: Number(idParam) }" label="📲 Send report" />
+        <WhatsAppBtn v-if="key === 'patients'" type="welcome" :payload="{ patient_id: Number(idParam) }" label="📲 Welcome msg" />
+        <WhatsAppBtn v-if="key === 'visits'" type="bill" :payload="{ visit_id: Number(idParam) }" label="📲 Send bill" />
+        <WhatsAppBtn v-if="key === 'visits' && model.status === 'Completed'" type="thanks" :payload="{ visit_id: Number(idParam) }" label="📲 Thank-you msg" />
         <NuxtLink v-if="key === 'lab_orders'" :to="`/print/lab-slip/${idParam}`" class="btn">🖨 Collection slip</NuxtLink>
         <NuxtLink v-if="key === 'lab_orders'" :to="`/print/lab/${idParam}`" class="btn">🖨 Lab report</NuxtLink>
         <NuxtLink v-if="key === 'prescriptions'" :to="`/print/rx/${idParam}`" class="btn">🖨 Print prescription</NuxtLink>

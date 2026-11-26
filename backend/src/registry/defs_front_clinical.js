@@ -17,6 +17,7 @@ module.exports = (R) => {
     'address:text',
     'blood_group:select=A+/A-/B+/B-/AB+/AB-/O+/O-:Blood group',
     'language:select=English/Arabic/Malayalam/Hindi/Urdu/Tagalog/Other:Preferred language',
+    'whatsapp_ok:bool:OK to send WhatsApp messages:def=true',
     'occupation:text',
     'employer_id:ref=corporate_accounts:Employer (corporate account)',
     'emergency_name:text:Emergency contact',

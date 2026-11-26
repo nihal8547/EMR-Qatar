@@ -68,6 +68,7 @@ const EXTRA_PERMISSIONS = [
   ['pharmacy.dispense_credit', 'Pharmacy: dispense now and bill later (without taking payment)'],
   ['pharmacy.stock', 'Pharmacy: stock and expiry view'],
   ['billing.cashier', 'Cashier: invoices, payments, session'],
+  ['notify.send', 'Send results, bills and messages to patients on WhatsApp'],
   ['billing.day_close', 'Day Close: close the day and see the closing summary'],
   ['billing.day_reopen', 'Day Close: reopen a closed day'],
   ['billing.discount', 'Billing: give discount up to own limit'],

@@ -37,6 +37,15 @@ app.get('/api/health', wrap(async (req, res) => {
 }));
 
 app.use('/api/auth', auth.router);
+// Signed, expiring PDF links used by the WhatsApp (n8n) integration. No login: the signature is the credential.
+app.get('/api/public/f/:token', wrap(async (req, res) => {
+  const t = require('./notify').verifyFile(String(req.params.token).replace(/\.pdf$/, ''));
+  if (!t) return res.status(403).json({ error: 'This link is invalid or has expired' });
+  const pdfs = require('./pdfs');
+  const buf = t.kind === 'inv' ? await pdfs.invoicePdf(t.id) : t.kind === 'lab' ? await pdfs.labPdf(t.id) : t.kind === 'img' ? await pdfs.imagingPdf(t.id) : null;
+  if (!buf) return res.status(404).json({ error: 'Document not available' });
+  res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${t.kind}-${t.id}.pdf"`, 'Cache-Control': 'private, max-age=300' }).send(buf);
+}));
 
 // everything below needs a logged-in user
 app.use('/api', auth.authenticate);
@@ -70,6 +79,7 @@ app.use('/api', require('./workflows/pharmacy'));
 app.use('/api', require('./workflows/billing'));
 app.use('/api', require('./workflows/walkin'));
 app.use('/api', require('./workflows/visitmanage'));
+app.use('/api', require('./workflows/notify'));
 app.use('/api', crud.router); // generic CRUD last: it blocks portal users
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));

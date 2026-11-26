@@ -42,7 +42,7 @@ const ROLES = [
   {
     name: 'Hospital Manager', description: 'Read-only oversight of every area, approvals, all reports', restrict: false, discount: 20,
     perms: [
-      ...reg.order.map((k) => `${k}:v`), 'dashboard.view', 'pricing.view', 'reports.view', 'reports.finance', 'billing.approve_discount', 'patients.360', 'visits.manage', 'billing.day_close', 'billing.day_reopen', 'day_closes:v',
+      ...reg.order.map((k) => `${k}:v`), 'dashboard.view', 'notify.send', 'pricing.view', 'reports.view', 'reports.finance', 'billing.approve_discount', 'patients.360', 'visits.manage', 'billing.day_close', 'billing.day_reopen', 'day_closes:v',
       'refunds:v+approve+reject', 'bill_cancel_requests:v+approve+reject', 'credit_notes:v+approve', 'discount_approvals:v+approve+reject', 'write_offs:v+approve+reject', 'leaves:v+approve+reject',
       'dental.chart', 'requisitions:v+approve+reject', 'purchase_orders:v+approve+cancel', 'payroll_runs:v+approve', 'users:vced', 'roles:v', 'audit_log:v',
     ],
@@ -50,7 +50,7 @@ const ROLES = [
   {
     name: 'Receptionist', description: 'Registration, appointments, check-in', restrict: false, discount: 5,
     perms: [
-      'dashboard.view', 'visits.start', 'visits.manage', 'walkin.create', 'billing.cashier', 'billing.discount', 'invoices:v', 'payments:v', 'bill_cancel_requests:vc', 'queue.view', 'patients:vce', 'patient_family:vced', 'patient_allergies:v', 'patient_documents:vce', 'consents:vce',
+      'dashboard.view', 'notify.send', 'visits.start', 'visits.manage', 'walkin.create', 'billing.cashier', 'billing.discount', 'invoices:v', 'payments:v', 'bill_cancel_requests:vc', 'queue.view', 'patients:vce', 'patient_family:vced', 'patient_allergies:v', 'patient_documents:vce', 'consents:vce',
       'appointments:vced', 'doctor_schedules:v', 'visits:ve', 'policy_members:vce', 'payers:v', 'plans:v', 'eligibility_checks:v', 'corporate_accounts:v', 'users:v', ...LOOKUPS,
     ],
   },
@@ -64,7 +64,7 @@ const ROLES = [
   {
     name: 'Doctor', description: 'Consultation, EMR, orders, prescriptions', restrict: true, discount: 0,
     perms: [
-      'dashboard.view', 'pricing.view', 'queue.view', 'consult.use', 'patients.360', 'patients:v', 'patient_allergies:vce', 'patient_family:v', 'patient_documents:v', 'consents:v',
+      'dashboard.view', 'notify.send', 'pricing.view', 'queue.view', 'consult.use', 'patients.360', 'patients:v', 'patient_allergies:vce', 'patient_family:v', 'patient_documents:v', 'consents:v',
       'appointments:v', 'visits:v', 'vitals:v', 'nursing_notes:v', 'encounters:vce', 'diagnoses:vced', 'diagnosis_codes:v', 'prescriptions:vce', 'prescription_items:vced',
       'procedure_orders:vced', 'certificates:vced', 'referrals:vced', 'lab_orders:v', 'lab_order_items:v', 'lab_tests:v', 'lab_panels:v', 'imaging_orders:v', 'imaging_reports:v',
       'drugs:v', 'drug_interactions:v', 'services:v', 'imaging_modalities:v', 'doctor_schedules:v', 'users:v', ...LOOKUPS,
@@ -74,13 +74,13 @@ const ROLES = [
   {
     name: 'Lab Technician', description: 'Sample collection, results, validation, QC', restrict: false, discount: 0,
     perms: [
-      'dashboard.view', 'lab.work', 'lab.validate', 'patients:v', 'visits:v', 'lab_orders:ve', 'lab_order_items:ve', 'specimens:vce', 'qc_runs:vce', 'analyzers:v',
+      'dashboard.view', 'notify.send', 'lab.work', 'lab.validate', 'patients:v', 'visits:v', 'lab_orders:ve', 'lab_order_items:ve', 'specimens:vce', 'qc_runs:vce', 'analyzers:v',
       'lab_tests:vce', 'lab_panels:vce', 'lab_panel_tests:vced', 'outsourced_labs:vce', 'items:v', 'stock_batches:v', 'users:v', ...LOOKUPS,
     ],
   },
   {
     name: 'Radiology Technician', description: 'Imaging worklist and reports', restrict: false, discount: 0,
-    perms: ['dashboard.view', 'radiology.report', 'patients:v', 'visits:v', 'imaging_orders:ve', 'imaging_reports:vce', 'imaging_modalities:v', 'users:v', ...LOOKUPS],
+    perms: ['dashboard.view', 'notify.send', 'radiology.report', 'patients:v', 'visits:v', 'imaging_orders:ve', 'imaging_reports:vce', 'imaging_modalities:v', 'users:v', ...LOOKUPS],
   },
   {
     name: 'Pharmacist', description: 'Dispensing, OTC sales, drug master, pharmacy stock', restrict: false, discount: 0,
@@ -100,7 +100,7 @@ const ROLES = [
   {
     name: 'Cashier', description: 'Invoices, payments, deposits, refund requests, cashier session', restrict: false, discount: 5,
     perms: [
-      'dashboard.view', 'pricing.view', 'billing.cashier', 'billing.day_close', 'day_closes:v', 'walkin.create', 'billing.discount', 'queue.view', 'patients:v', 'visits:v', 'services:v', 'packages:v', 'package_items:v', 'price_lists:v', 'price_list_items:v',
+      'dashboard.view', 'notify.send', 'pricing.view', 'billing.cashier', 'billing.day_close', 'day_closes:v', 'walkin.create', 'billing.discount', 'queue.view', 'patients:v', 'visits:v', 'services:v', 'packages:v', 'package_items:v', 'price_lists:v', 'price_list_items:v',
       'charges:vce', 'invoices:v', 'payments:v', 'deposits:vc', 'refunds:vc', 'credit_notes:vc', 'bill_cancel_requests:v+approve+reject', 'cashier_sessions:v', 'discount_approvals:vc',
       'policy_members:v', 'payers:v', 'plans:v', 'corporate_accounts:v', 'guarantee_letters:v', 'pre_auths:v', 'users:v', ...LOOKUPS,
     ],
@@ -177,6 +177,10 @@ async function main() {
       ['centre_phone', '+974 4000 0000', 'Phone on invoices'],
       ['tax_note', 'No VAT is currently charged in Qatar on healthcare services. Confirm with your accountant.', 'Printed on invoices'],
       ['currency', 'QAR', 'Currency'],
+      ['n8n_enabled', 'false', 'WhatsApp via n8n: true / false'],
+      ['n8n_webhook_base', 'https://n8n.webbea.qa/webhook/hms', 'n8n webhook base URL (the secret goes in env N8N_WEBHOOK_SECRET)'],
+      ['public_base_url', 'http://localhost:4000', 'Public URL of this HMS (WhatsApp PDF links point here; must be reachable from the internet)'],
+      ['n8n_send_bill_on_complete', 'false', 'Attach the bill to the thank-you message: true / false'],
     ]) await ins(c, '"admin"."settings"', { key, value, description });
     for (const [name, type, mode, notes] of [
       ['Insurer claims gateway', 'Insurer', 'Simulated', 'Simulation only. A real payer adapter must be built per insurer.'],

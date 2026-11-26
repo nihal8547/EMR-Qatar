@@ -36,7 +36,7 @@ function computeSplit({ charges, payer_type, plan, discountPct = 0 }) {
 
 /** A visit in Billing is completed once every charge is invoiced and every invoice is settled. */
 async function settleVisit(client, visitId) {
-  await client.query(
+  const done = await client.query(
     `UPDATE "scheduling"."visits" v SET status='Completed', closed_at=COALESCE(closed_at, now()), updated_at=now()
       WHERE v.id=$1
         AND (v.status='Billing' OR (v.visit_type='Walk-in' AND v.status IN ('Registered','Diagnostics')
@@ -44,7 +44,9 @@ async function settleVisit(client, visitId) {
               AND NOT EXISTS (SELECT 1 FROM "radiology"."imaging_orders" o WHERE o.visit_id=v.id AND o.is_deleted=false AND o.status <> 'Reported')))
         AND EXISTS (SELECT 1 FROM "billing"."invoices" i WHERE i.visit_id=v.id AND i.status <> 'Cancelled' AND i.is_deleted=false)
         AND NOT EXISTS (SELECT 1 FROM "billing"."invoices" i WHERE i.visit_id=v.id AND i.status <> 'Cancelled' AND i.is_deleted=false AND i.balance > 0.005)
-        AND NOT EXISTS (SELECT 1 FROM "billing"."charges" c WHERE c.visit_id=v.id AND c.status='Pending' AND c.is_deleted=false)`, [visitId]);
+        AND NOT EXISTS (SELECT 1 FROM "billing"."charges" c WHERE c.visit_id=v.id AND c.status='Pending' AND c.is_deleted=false)
+      RETURNING v.id`, [visitId]);
+  if (done.rowCount) require('./notify').auto('visit.completed', { visit_id: visitId }, 2500);   // thank-you message once everything is complete
 }
 
 /** Recompute paid / balance / status of an invoice from its payments. Marks the visit completed when settled. */

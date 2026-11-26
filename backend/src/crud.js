@@ -355,6 +355,7 @@ router.post('/r/:key', wrap(async (req, res) => {
     if (r.key === 'patients' && req.body.insurance !== undefined && req.body.insurance !== null) await addPolicies(client, req, newId, req.body.insurance);
     return newId;
   });
+  if (r.key === 'patients') require('./notify').auto('patient.registered', { patient_id: id });
   res.status(201).json(await fetchOne(db, r, id));
 }));
 
@@ -383,6 +384,7 @@ router.put('/r/:key/:id', wrap(async (req, res) => {
     for (const n of names) if (String(existing[n] ?? '') !== String(data[n] ?? '') && n !== 'password_hash') changes[n] = { from: existing[n], to: n === 'password' ? '***' : data[n] };
     await audit(client, req.user, 'UPDATE', r.key, id, changes, req.ip);
   });
+  if (r.key === 'settings') require('./notify').resetCache();
   res.json(await fetchOne(db, r, id));
 }));
 

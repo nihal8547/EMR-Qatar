@@ -107,7 +107,7 @@ async function closeSession() {
         <div v-if="!list.length && !loadingList" class="empty">No visits found.</div><div v-if="list.length < total" class="bar" style="padding:8px"><button class="sm" :disabled="loadingList" @click="loadMore">Load more ({{ list.length }} of {{ total }})</button></div></div>
       <div v-if="d">
         <div class="card"><div class="bar" style="margin:0"><div><h2 style="margin:0">{{ d.patient.full_name }}</h2><span class="muted small">{{ d.patient.mrn }} · {{ d.visit.visit_no }} · {{ d.visit.payer_type }}</span></div><div class="sp"></div>
-          <span v-if="d.deposit_balance > 0" class="badge blue">Deposit {{ money(d.deposit_balance) }}</span><span class="badge" :class="badgeClass(d.visit.status)">{{ d.visit.status }}</span></div>
+          <span v-if="d.deposit_balance > 0" class="badge blue">Deposit {{ money(d.deposit_balance) }}</span><WhatsAppBtn v-if="d.invoice?.invoice" type="bill" :payload="{ visit_id: d.visit.id }" label="📲 Send bill" /><span class="badge" :class="badgeClass(d.visit.status)">{{ d.visit.status }}</span></div>
           <div v-if="d.visit.payer_type === 'Insurance' && d.visit.eligibility_status !== 'Eligible'" class="alert warn" style="margin-top:8px">Eligibility: {{ d.visit.eligibility_status }}</div>
           <div v-for="p in d.preauths" :key="p.auth_no" class="small">Pre-auth {{ p.auth_no }} · {{ p.name }} · <span class="badge" :class="badgeClass(p.status)">{{ p.status }}</span></div></div>
         <div v-if="d.checkin_discount" class="alert" :class="d.checkin_discount.status === 'Applied' ? 'ok' : 'warn'">

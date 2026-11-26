@@ -79,7 +79,9 @@ async function refreshOrderStatus(client, orderId) {
     `SELECT count(*)::int total, count(*) FILTER (WHERE status='Pending')::int pending, count(*) FILTER (WHERE status='Validated')::int validated
        FROM "lab"."lab_order_items" WHERE order_id=$1 AND is_deleted=false`, [orderId])).rows[0];
   const st = r.validated === r.total ? 'Validated' : r.pending === 0 ? 'Resulted' : 'In Progress';
+  const was = (await client.query(`SELECT status FROM "lab"."lab_orders" WHERE id=$1`, [orderId])).rows[0];
   await client.query(`UPDATE "lab"."lab_orders" SET status=$1, updated_at=now() WHERE id=$2 AND status NOT IN ('Cancelled','Ordered')`, [st, orderId]);
+  if (st === 'Validated' && was && was.status !== 'Validated') require('../notify').auto('result.ready', { lab_order_id: orderId });
   const o = (await client.query(`SELECT visit_id FROM "lab"."lab_orders" WHERE id=$1`, [orderId])).rows[0];
   if (o && o.visit_id) await require('../billingCore').settleVisit(client, o.visit_id);   // walk-in visits close when results are out and the bill is settled
 }
