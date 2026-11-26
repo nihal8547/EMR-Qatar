@@ -80,6 +80,8 @@ async function refreshOrderStatus(client, orderId) {
        FROM "lab"."lab_order_items" WHERE order_id=$1 AND is_deleted=false`, [orderId])).rows[0];
   const st = r.validated === r.total ? 'Validated' : r.pending === 0 ? 'Resulted' : 'In Progress';
   await client.query(`UPDATE "lab"."lab_orders" SET status=$1, updated_at=now() WHERE id=$2 AND status NOT IN ('Cancelled','Ordered')`, [st, orderId]);
+  const o = (await client.query(`SELECT visit_id FROM "lab"."lab_orders" WHERE id=$1`, [orderId])).rows[0];
+  if (o && o.visit_id) await require('../billingCore').settleVisit(client, o.visit_id);   // walk-in visits close when results are out and the bill is settled
 }
 
 router.post('/lab/items/:id/result', need('lab.work'), wrap(async (req, res) => {
