@@ -1,6 +1,26 @@
+# Dependencies
 node_modules/
+**/node_modules/
+node_modules
+
+# Nuxt & Build Output
 .output/
+**/.output/
 .nuxt/
+**/.nuxt/
+dist/
+**/.dist/
+
+# Environment files
 .env
+.env.*
+!.env.example
+
+# Logs and OS files
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 *.zip
+.DS_Store
+Thumbs.db

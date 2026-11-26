@@ -26,6 +26,7 @@ type ChargeGroup = {
   created_at: string
 }
 
+<<<<<<< Updated upstream
 type DoctorScheduleGroup = {
   id: string
   doctor_id: number | null
@@ -37,6 +38,8 @@ type DoctorScheduleGroup = {
   active: boolean
 }
 
+=======
+>>>>>>> Stashed changes
 const groupedCharges = computed<ChargeGroup[]>(() => {
   if (key.value !== 'charges') return []
   const map: Record<string, ChargeGroup> = {}
@@ -71,6 +74,7 @@ const groupedCharges = computed<ChargeGroup[]>(() => {
   return Object.values(map)
 })
 
+<<<<<<< Updated upstream
 const dayOrder: Record<string, number> = {
   Sunday: 0,
   Monday: 1,
@@ -117,11 +121,14 @@ const groupedDoctorSchedules = computed<DoctorScheduleGroup[]>(() => {
   })
 })
 
+=======
+>>>>>>> Stashed changes
 function toggleGroup(id: string) {
   expandedGroups.value[id] = !expandedGroups.value[id]
 }
 
 function expandAll(val = true) {
+<<<<<<< Updated upstream
   if (key.value === 'charges') {
     for (const g of groupedCharges.value) {
       expandedGroups.value[g.id] = val
@@ -138,6 +145,13 @@ function onScheduleSelect(g: DoctorScheduleGroup, scheduleId: string) {
   navigateTo(`/r/doctor_schedules/${scheduleId}`)
 }
 
+=======
+  for (const g of groupedCharges.value) {
+    expandedGroups.value[g.id] = val
+  }
+}
+
+>>>>>>> Stashed changes
 const listFields = computed(() => (m.value?.fields || []).filter((f: any) => f.list && !f.hidden))
 const filterFields = computed(() => (m.value?.fields || []).filter((f: any) => f.filter && !f.hidden))
 const dateField = computed(() => listFields.value.find((f: any) => f.type === 'date' || f.type === 'datetime'))
@@ -158,8 +172,13 @@ async function load() {
 async function init() {
   const meta = await ensure()
   m.value = meta[key.value] || null
+<<<<<<< Updated upstream
   const defaultLimit = (key.value === 'charges' || key.value === 'doctor_schedules') ? 100 : 25
   isGrouped.value = key.value === 'charges' || key.value === 'doctor_schedules'
+=======
+  const defaultLimit = key.value === 'charges' ? 100 : 25
+  isGrouped.value = key.value === 'charges'
+>>>>>>> Stashed changes
   expandedGroups.value = {}
   Object.assign(state, { q: '', page: 1, limit: defaultLimit, sort: '', dir: 'desc', filters: Object.fromEntries(filterFields.value.map((f: any) => [f.name, ''])), from: '', to: '' })
   rows.value = []
@@ -191,9 +210,15 @@ async function exportCsv() { try { await downloadCsv(`/r/${key.value}`, { ...que
   <div v-if="!m" class="card"><h1>Not available</h1><p class="muted">This list does not exist, or your role cannot view it.</p></div>
   <div v-else>
     <div class="bar"><div><h1>{{ m.label }}</h1><div v-if="m.help" class="muted small">{{ m.help }}</div></div><div class="sp"></div>
+<<<<<<< Updated upstream
       <template v-if="key === 'charges' || key === 'doctor_schedules'">
         <button type="button" class="sm" :class="{ p: isGrouped }" @click="isGrouped = !isGrouped">
           {{ isGrouped ? (key === 'charges' ? '👥 Same Person Grouped' : '👨‍⚕️ Grouped by Doctor') : '📋 Flat View' }}
+=======
+      <template v-if="key === 'charges'">
+        <button type="button" class="sm" :class="{ p: isGrouped }" @click="isGrouped = !isGrouped">
+          {{ isGrouped ? '👥 Same Person Grouped' : '📋 Flat View' }}
+>>>>>>> Stashed changes
         </button>
         <template v-if="isGrouped">
           <button type="button" class="sm" @click="expandAll(true)">▾ Expand all</button>
@@ -329,6 +354,7 @@ async function exportCsv() { try { await downloadCsv(`/r/${key.value}`, { ...que
         </div>
       </template>
 
+<<<<<<< Updated upstream
       <!-- Grouped view for Doctor Schedules -->
       <template v-else-if="key === 'doctor_schedules' && isGrouped">
         <div class="tbl-wrap">
@@ -430,27 +456,42 @@ async function exportCsv() { try { await downloadCsv(`/r/${key.value}`, { ...que
         </div>
       </template>
 
+=======
+>>>>>>> Stashed changes
       <!-- Standard flat view -->
       <template v-else>
         <div class="tbl-wrap">
           <table>
+<<<<<<< Updated upstream
             <thead><tr><th v-if="printBase" class="no-print"></th><th v-for="f in listFields" :key="f.name" class="sort" :class="{ num: numeric(f) }" @click="sortBy(f)">{{ f.label }} <span v-if="state.sort === f.name">{{ state.dir === 'asc' ? '▲' : '▼' }}</span></th></tr></thead>
             <tbody>
               <tr v-for="r in rows" :key="r.id" class="click" @click="navigateTo(`/r/${key}/${r.id}`)">
                 <td v-if="printBase" class="no-print" @click.stop><NuxtLink :to="`${printBase}/${r.id}`" class="btn sm" title="Print">🖨</NuxtLink></td>
+=======
+            <thead><tr><th v-for="f in listFields" :key="f.name" class="sort" :class="{ num: numeric(f) }" @click="sortBy(f)">{{ f.label }} <span v-if="state.sort === f.name">{{ state.dir === 'asc' ? '▲' : '▼' }}</span></th></tr></thead>
+            <tbody>
+              <tr v-for="r in rows" :key="r.id" class="click" @click="navigateTo(`/r/${key}/${r.id}`)">
+>>>>>>> Stashed changes
                 <td v-for="f in listFields" :key="f.name" :class="{ num: numeric(f) }"><span v-if="isStatus(f) && r[f.name]" class="badge" :class="badgeClass(r[f.name])">{{ r[f.name] }}</span><template v-else>{{ cell(r, f) }}</template></td>
               </tr>
             </tbody>
           </table>
           <div v-if="!loading && !rows.length" class="empty">No records found.</div>
+<<<<<<< Updated upstream
           <div v-if="loading" class="empty loading">Loading…</div>
+=======
+          <div v-if="loading" class="empty">Loading…</div>
+>>>>>>> Stashed changes
         </div>
       </template>
     </div>
     <div class="bar">
       <span class="muted small">
         <template v-if="key === 'charges' && isGrouped">{{ groupedCharges.length }} person group(s) · </template>
+<<<<<<< Updated upstream
         <template v-else-if="key === 'doctor_schedules' && isGrouped">{{ groupedDoctorSchedules.length }} doctor(s) · </template>
+=======
+>>>>>>> Stashed changes
         {{ total }} record(s)
       </span>
       <div class="sp"></div>
