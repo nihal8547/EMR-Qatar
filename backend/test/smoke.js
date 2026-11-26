@@ -474,6 +474,46 @@ const section = (t) => console.log(`\n== ${t}`);
   const phistN = await call(tk.nurse, 'GET', `/patients/${phP.data.id}/history`);
   ok('history keeps the break-glass rule for restricted roles', phistN.status === 403 && phistN.data.extra?.breakglass, phistN.data);
 
+  section('Patient Payments: cancel options + Day Close');
+  const cpP = await call(tk.admin, 'POST', '/r/patients', { full_name: 'Zainab Hamdan Alkuwari', gender: 'Female', qid: '27455667781', dob: '1974-09-17', phone: '+974 5512 8841' });
+  const cpV = await call(tk.reception, 'POST', '/visits/start', { patient_id: cpP.data.id, doctor_id: saraU.id, payer_type: 'Cash' });
+  const cpI = await call(tk.reception, 'POST', `/billing/visit/${cpV.data.id}/invoice`, {});
+  ok('invoice created', cpI.status === 200 || cpI.status === 201, cpI.data);
+  ok('cashier can cancel an unpaid invoice directly', (await call(tk.cashier, 'POST', `/billing/invoices/${cpI.data.invoice.id}/cancel`, { reason: 'Patient declined the bill' })).status === 200);
+  const cpU = await call(tk.reception, 'GET', `/billing/visit/${cpV.data.id}`);
+  ok('charges back to pending after invoice cancel', cpU.data.pending.length >= 1, cpU.data.pending);
+  ok('cancel-unbilled needs a reason (400)', (await call(tk.cashier, 'POST', `/billing/visit/${cpV.data.id}/cancel-unbilled`, {})).status === 400);
+  ok('lab cannot cancel unbilled (403)', (await call(tk.lab, 'POST', `/billing/visit/${cpV.data.id}/cancel-unbilled`, { reason: 'nope nope' })).status === 403);
+  const cpC = await call(tk.cashier, 'POST', `/billing/visit/${cpV.data.id}/cancel-unbilled`, { reason: 'Patient left' });
+  ok('cancel-unbilled works and keeps the consultation fee', cpC.status === 200 && Array.isArray(cpC.data.kept), cpC.data);
+  // void a receipt
+  const vpV = await call(tk.reception, 'POST', '/visits/start', { patient_id: cpP.data.id, doctor_id: saraU.id, payer_type: 'Cash', allow_duplicate: true });
+  const vpI = await call(tk.reception, 'POST', `/billing/visit/${vpV.data.id}/invoice`, {});
+  const vpP = await call(tk.reception, 'POST', `/billing/invoices/${vpI.data.invoice.id}/pay`, { amount: 5, method: 'Card' });
+  const vpB = await call(tk.reception, 'GET', `/billing/visit/${vpV.data.id}`);
+  const rcp = vpB.data.invoice.payments.find((x) => x.kind === 'Payment');
+  ok('payment exists', !!rcp, vpP.data);
+  ok('reception cannot cancel a receipt (403)', (await call(tk.reception, 'POST', `/billing/payments/${rcp.id}/void`, { reason: 'Wrong amount' })).status === 403);
+  ok('receipt void needs a reason (400)', (await call(tk.cashier, 'POST', `/billing/payments/${rcp.id}/void`, { reason: 'x' })).status === 400);
+  ok('cashier cancels the receipt', (await call(tk.cashier, 'POST', `/billing/payments/${rcp.id}/void`, { reason: 'Wrong amount' })).status === 200);
+  ok('receipt cannot be cancelled twice (409)', (await call(tk.cashier, 'POST', `/billing/payments/${rcp.id}/void`, { reason: 'Wrong amount' })).status === 409);
+  const vpA = await call(tk.reception, 'GET', `/billing/visit/${vpV.data.id}`);
+  ok('invoice paid goes back to zero', Number(vpA.data.invoice.invoice.paid) === 0 && vpA.data.invoice.payments.some((x) => x.voided), vpA.data.invoice.invoice);
+  // day close
+  ok('reception cannot see day close (403)', (await call(tk.reception, 'GET', '/billing/day-close/summary')).status === 403);
+  const dc0 = await call(tk.cashier, 'GET', '/billing/day-close/summary');
+  ok('day summary returns totals', dc0.status === 200 && typeof dc0.data.net === 'number' && Array.isArray(dc0.data.sessions), dc0.data);
+  for (const r of ['cashier', 'reception', 'admin']) await call(tk[r], 'POST', '/billing/session/close', { closing_cash: 0 });
+  ok('close day', (await call(tk.cashier, 'POST', '/billing/day-close', { counted_cash: 0 })).status === 200);
+  ok('closing twice refused (409)', (await call(tk.cashier, 'POST', '/billing/day-close', {})).status === 409);
+  const dcB = await call(tk.reception, 'POST', `/billing/invoices/${vpI.data.invoice.id}/pay`, { amount: 5, method: 'Card' });
+  ok('payments blocked on a closed day (409)', dcB.status === 409 && /closed/i.test(JSON.stringify(dcB.data)), dcB.data);
+  ok('cashier session cannot open on a closed day (409)', (await call(tk.cashier, 'POST', '/billing/session/open', { opening_cash: 0 })).status === 409);
+  ok('cashier cannot reopen (403)', (await call(tk.cashier, 'POST', '/billing/day-close/reopen', { reason: 'Need to fix it' })).status === 403);
+  ok('manager reopens with a reason', (await call(tk.manager, 'POST', '/billing/day-close/reopen', { reason: 'Missed one receipt' })).status === 200);
+  ok('payments work again after reopen', (await call(tk.reception, 'POST', `/billing/invoices/${vpI.data.invoice.id}/pay`, { amount: 5, method: 'Card' })).status === 200);
+
+
   console.log(`\n${passed} passed, ${failed.length} failed`);
   if (failed.length) { console.log('Failed:\n - ' + failed.join('\n - ')); process.exit(1); }
 })().catch((e) => { console.error('Test crashed:', e); process.exit(2); });

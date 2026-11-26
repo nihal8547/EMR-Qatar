@@ -122,6 +122,7 @@ def('stock_transfers', 'post', async ({ client, user, row }) => {
 /* ---------- billing ---------- */
 def('refunds', 'approve', async ({ client, user, row }) => {
   mustBe(row, 'Requested');
+  await billing.assertDayOpen(client);
   const inv = (await client.query(`SELECT * FROM "billing"."invoices" WHERE id=$1 FOR UPDATE`, [row.invoice_id])).rows[0];
   if (Number(row.amount) > Number(inv.paid) + 0.005) throw bad(`Refund exceeds the amount paid (${Number(inv.paid).toFixed(2)})`);
   const session = (await client.query(`SELECT id FROM "billing"."cashier_sessions" WHERE user_id=$1 AND status='Open' AND is_deleted=false LIMIT 1`, [user.id])).rows[0];
@@ -147,6 +148,7 @@ def('bill_cancel_requests', 'approve', async ({ client, user, row }) => {
   if (claim) throw conflict('A claim exists for this bill. Reject or withdraw the claim first.');
   if (row.requested_by === user.id && !user.perms.has('billing.approve_discount')) throw forbidden('You cannot approve your own request');
   const paid = round2(inv.paid);
+  if (paid > 0) await billing.assertDayOpen(client);
   if (paid > 0) {                       // refund what the patient paid, in the approver's session
     const session = (await client.query(`SELECT id FROM "billing"."cashier_sessions" WHERE user_id=$1 AND status='Open' AND is_deleted=false LIMIT 1`, [user.id])).rows[0];
     const code = await db.nextCode(client, 'RCP', 6);

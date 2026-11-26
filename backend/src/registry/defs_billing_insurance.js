@@ -153,6 +153,25 @@ module.exports = (R) => {
     'notes:text',
   ], { schema: 'billing', readonly: true, disp: ['id'], help: 'Open and close your session in Cashier Desk.' });
 
+  R('day_closes', 'billing', 'Day Close', [
+    'close_date:date:Business date:list,uniq',
+    'status:select=Closed/Reopened:Status:list,filter',
+    'cash_total:money:Cash:list',
+    'card_total:money:Card:list',
+    'bank_total:money:Bank transfer:list',
+    'online_total:money:Online / deposit:list',
+    'refund_total:money:Refunds / voids:list',
+    'net_total:money:Net collected:list',
+    'invoices_count:int:Invoices:list',
+    'payments_count:int:Receipts:list',
+    'counted_cash:money:Counted cash',
+    'notes:text',
+    'closed_by:ref=users:Closed by:list',
+    'closed_at:datetime:Closed at:list',
+    'reopened_by:ref=users:Reopened by',
+    'reopen_reason:text:Reopen reason',
+  ], { schema: 'billing', readonly: true, disp: ['close_date'], help: 'Closed days are locked: no payment or refund can be posted until a manager reopens the day.' });
+
   R('discount_approvals', 'billing', 'Discount Approvals', [
     'invoice_id:ref=invoices:Invoice:req,list',
     'requested_pct:decimal:Requested discount %:req,list',

@@ -70,6 +70,15 @@ async function decideCancel(approve: boolean) {
   const r = await run(() => api(`/r/bill_cancel_requests/${cr.id}/action/${approve ? 'approve' : 'reject'}`, { method: 'POST', body }), approve ? 'Bill cancelled' : 'Request rejected')
   if (r) { await Promise.all([loadVisit(), loadList(), loadSess()]) }
 }
+async function cancelUnbilled() {
+  const reason = prompt('Reason for cancelling ALL unbilled items (tests / X-rays / procedures) of this visit:'); if (!reason) return
+  const r = await run(() => api(`/billing/visit/${d.value.visit.id}/cancel-unbilled`, { method: 'POST', body: { reason } }), 'Unbilled items cancelled')
+  if (r) { if (r.kept?.length) alert('Could not cancel (already started / not removable):\n' + r.kept.map((k: any) => '• ' + k.description + ' — ' + k.why).join('\n')); await loadVisit(); loadList() }
+}
+async function voidReceipt(p: any) {
+  const reason = prompt(`Cancel receipt ${p.receipt_no} (${money(p.amount)}). Money goes back to the patient. Reason:`); if (!reason) return
+  if (await run(() => api(`/billing/payments/${p.id}/void`, { method: 'POST', body: { reason } }), 'Receipt cancelled')) { await loadVisit(); loadList() }
+}
 async function cancelInvoice() { const reason = prompt('Reason for cancelling this invoice:'); if (!reason) return; if (await run(() => api(`/billing/invoices/${inv.value.id}/cancel`, { method: 'POST', body: { reason } }), 'Invoice cancelled')) { await loadVisit(); loadList() } }
 async function openSession() { if (await run(() => api('/billing/session/open', { method: 'POST', body: { opening_cash: openCash.value || 0 } }), 'Session opened')) { loadSess(); loadVisit() } }
 async function closeSession() {
@@ -79,7 +88,7 @@ async function closeSession() {
 </script>
 <template>
   <div>
-    <div class="bar"><h1>{{ front ? 'Patient Payments' : 'Cashier Desk' }}<span v-if="front" class="muted small"> · bills, lab tests, X-rays, procedures</span></h1><div class="sp"></div>
+    <div class="bar"><h1>{{ front ? 'Patient Payments' : 'Cashier Desk' }}<NuxtLink v-if="can('billing.day_close')" to="/day-close" class="btn sm" style="margin-left:10px">Day Close</NuxtLink><span v-if="front" class="muted small"> · bills, lab tests, X-rays, procedures</span></h1><div class="sp"></div>
       <template v-if="sess?.session"><span class="badge green">Session open since {{ fdt(sess.session.opened_at) }}</span><span class="small">Expected cash {{ money(sess.expected_cash) }}</span><input type="number" step="any" v-model.number="closeCash" placeholder="Counted cash" style="width:130px" /><button :disabled="busy || closeCash === null" @click="closeSession">Close session</button></template>
       <template v-else><span class="badge amber">No open session (needed for cash)</span><input type="number" step="any" v-model.number="openCash" placeholder="Opening cash" style="width:130px" /><button class="p" :disabled="busy" @click="openSession">Open session</button></template></div>
     <div class="split">
@@ -107,7 +116,8 @@ async function closeSession() {
         <div class="card">
           <div class="bar"><h2 style="margin:0">Bill items <span class="cnt-pill">{{ items.length }}</span></h2><div class="sp"></div>
             <span v-if="inv" class="muted small">Invoice {{ inv.invoice_no }}</span><span v-if="inv" class="badge" :class="badgeClass(inv.status)">{{ inv.status }}</span>
-            <NuxtLink v-if="inv" :to="`/print/invoice/${inv.id}`" class="btn sm">🖨 Print</NuxtLink></div>
+            <NuxtLink v-if="inv" :to="`/print/invoice/${inv.id}`" class="btn sm">🖨 Print</NuxtLink>
+            <button v-if="d.pending.length" class="sm danger" :disabled="busy" @click="cancelUnbilled">✕ Cancel all unbilled</button></div>
           <div v-if="!items.length" class="none-txt">No charges for this visit yet.</div>
           <table v-else class="bill"><thead><tr><th style="width:34px">#</th><th>Item</th><th>Source</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th><th style="width:34px" class="no-print"></th></tr></thead>
             <tbody><tr v-for="(c, i) in items" :key="(c.billed ? 'i' : 'p') + c.id"><td class="muted">{{ i + 1 }}</td>
@@ -118,8 +128,8 @@ async function closeSession() {
             <div class="bill-ctl">
               <div class="bar" style="margin:0"><label class="small muted">Discount %</label><input type="number" min="0" max="100" step="any" v-model.number="disc" style="width:90px" @input="discTouched = true" :disabled="!can('billing.discount') && !can('billing.approve_discount')" /><span v-if="!can('billing.discount') && !can('billing.approve_discount')" class="small muted">no discount rights</span></div>
               <div class="bar" style="margin:8px 0 0"><button class="p" :disabled="busy || (!d.pending.length && !inv)" @click="makeInvoice">{{ inv ? 'Add new charges / refresh invoice' : 'Create invoice' }}</button>
-                <button v-if="inv && inv.status !== 'Cancelled' && !d.invoice.cancel_request && can('bill_cancel_requests.create') && !can('billing.approve_discount')" :disabled="busy" @click="requestCancel">Request bill cancel</button>
-                <button v-if="inv && can('billing.approve_discount') && Number(inv.paid) === 0 && inv.status !== 'Cancelled'" class="danger" @click="cancelInvoice">Cancel invoice</button></div>
+                <button v-if="inv && inv.status !== 'Cancelled' && !d.invoice.cancel_request && Number(inv.paid) > 0 && can('bill_cancel_requests.create') && !can('bill_cancel_requests.approve')" :disabled="busy" @click="requestCancel">Request bill cancel</button>
+                <button v-if="inv && can('billing.cashier') && Number(inv.paid) === 0 && inv.status !== 'Cancelled'" class="danger" @click="cancelInvoice">Cancel invoice</button></div>
             </div>
             <dl class="totals">
               <template v-if="inv"><dt>Gross</dt><dd>{{ money(inv.gross) }}</dd><dt>Discount</dt><dd>− {{ money(inv.discount) }}</dd><dt class="strong">Net total</dt><dd class="strong">{{ money(inv.net) }}</dd>
@@ -131,7 +141,7 @@ async function closeSession() {
         </div>
         <div class="card pay-card">
           <h2>Payment</h2>
-          <div v-if="d.invoice?.payments.length" style="margin-bottom:10px"><table><thead><tr><th>Receipt</th><th>Date</th><th>Method</th><th>Cashier</th><th class="num">Amount</th></tr></thead><tbody><tr v-for="p in d.invoice.payments" :key="p.id"><td>{{ p.receipt_no }}</td><td>{{ fdt(p.paid_at) }}</td><td>{{ p.method }} <span class="muted small">{{ p.reference }}</span></td><td>{{ p.cashier }}</td><td class="num">{{ p.kind === 'Refund' ? '-' : '' }}{{ money(p.amount) }}</td></tr></tbody></table></div>
+          <div v-if="d.invoice?.payments.length" style="margin-bottom:10px"><table><thead><tr><th>Receipt</th><th>Date</th><th>Method</th><th>Cashier</th><th class="num">Amount</th><th class="no-print"></th></tr></thead><tbody><tr v-for="p in d.invoice.payments" :key="p.id"><td>{{ p.receipt_no }}</td><td>{{ fdt(p.paid_at) }}</td><td>{{ p.method }} <span class="muted small">{{ p.reference }}</span></td><td>{{ p.cashier }}</td><td class="num">{{ p.kind === 'Refund' ? '-' : '' }}{{ money(p.amount) }}</td><td class="no-print"><span v-if="p.voided" class="badge red">cancelled</span><button v-else-if="p.kind === 'Payment' && p.method !== 'Deposit' && can('bill_cancel_requests.approve')" class="sm danger" :disabled="busy" @click="voidReceipt(p)">Cancel receipt</button></td></tr></tbody></table></div>
           <div v-if="inv" class="paysum"><div><span class="k">Patient share</span><b>{{ money(inv.patient_share) }}</b></div><div><span class="k">Paid</span><b>{{ money(inv.paid) }}</b></div><div><span class="k">Balance due</span><b :style="{ color: Number(inv.balance) > 0 ? 'var(--bad)' : 'var(--ok)' }">{{ money(inv.balance) }}</b></div></div>
           <template v-if="d.pending.length || (inv && Number(inv.balance) > 0 && inv.status !== 'Cancelled')">
             <div class="fgrid" style="margin-top:12px"><div class="field"><label class="f">Method</label><select v-model="pay.method"><option>Cash</option><option>Card</option><option>Bank transfer</option><option v-if="d.deposit_balance > 0">Deposit</option><option>Online</option></select></div>

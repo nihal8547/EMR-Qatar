@@ -3,7 +3,7 @@
 const express = require('express');
 const db = require('../db');
 const billing = require('../billingCore');
-const { wrap, bad, notFound, conflict, forbidden, need, can, audit, round2, getVisit } = require('../lib');
+const { wrap, bad, notFound, conflict, forbidden, need, can, audit, round2, getVisit, today } = require('../lib');
 
 const router = express.Router();
 
@@ -40,7 +40,8 @@ async function invoiceBundle(id) {
     `SELECT c.id, c.description, c.qty, c.unit_price, c.amount, c.source, s.code, s.covered
        FROM "billing"."charges" c JOIN "billing"."services" s ON s.id=c.service_id WHERE c.invoice_id=$1 AND c.is_deleted=false AND c.status <> 'Cancelled' ORDER BY c.id`, [id])).rows;
   const payments = (await db.query(
-    `SELECT p.id, p.receipt_no, p.kind, p.amount, p.method, p.reference, p.paid_at, u.full_name AS cashier FROM "billing"."payments" p LEFT JOIN "auth"."users" u ON u.id=p.cashier_id WHERE p.invoice_id=$1 AND p.is_deleted=false ORDER BY p.id`, [id])).rows;
+    `SELECT p.id, p.receipt_no, p.kind, p.amount, p.method, p.reference, p.paid_at, u.full_name AS cashier,
+            EXISTS(SELECT 1 FROM "billing"."payments" r WHERE r.invoice_id=p.invoice_id AND r.kind='Refund' AND r.reference='VOID ' || p.receipt_no AND r.is_deleted=false) AS voided FROM "billing"."payments" p LEFT JOIN "auth"."users" u ON u.id=p.cashier_id WHERE p.invoice_id=$1 AND p.is_deleted=false ORDER BY p.id`, [id])).rows;
   const s = (await db.query(`SELECT key, value FROM "admin"."settings" WHERE key IN ('centre_name','centre_address','centre_phone','tax_note') AND is_deleted=false`)).rows;
   const cancel_request = (await db.query(
     `SELECT r.id, r.request_no, r.reason, r.void_charges, r.requested_at, u.full_name AS requested_by FROM "billing"."bill_cancel_requests" r LEFT JOIN "auth"."users" u ON u.id=r.requested_by
@@ -86,12 +87,8 @@ router.get('/billing/invoices/:id', need('invoices.view'), wrap(async (req, res)
   res.json(await invoiceBundle(Number(req.params.id)));
 }));
 
-/** Remove a test / study / procedure the patient does not want. Cancels the order too, if it has not started. */
-router.post('/billing/charges/:id/remove', need('billing.cashier'), wrap(async (req, res) => {
-  const id = Number(req.params.id);
-  const reason = String(req.body?.reason || '').trim();
-  if (reason.length < 3) throw bad('A reason is required');
-  const out = await db.tx(async (client) => {
+/** Remove one test / study / procedure / manual charge (and cancel its order if not started). */
+async function removeChargeTx(client, req, id, reason) {
     const c = (await client.query(`SELECT * FROM "billing"."charges" WHERE id=$1 AND is_deleted=false FOR UPDATE`, [id])).rows[0];
     if (!c) throw notFound('Charge not found');
     if (c.status === 'Cancelled') throw conflict('Already removed');
@@ -132,6 +129,58 @@ router.post('/billing/charges/:id/remove', need('billing.cashier'), wrap(async (
     }
     await billing.settleVisit(client, c.visit_id);
     return { visit_id: c.visit_id };
+}
+
+/** Remove a test / study / procedure the patient does not want. Cancels the order too, if it has not started. */
+router.post('/billing/charges/:id/remove', need('billing.cashier'), wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const reason = String(req.body?.reason || '').trim();
+  if (reason.length < 3) throw bad('A reason is required');
+  const out = await db.tx((client) => removeChargeTx(client, req, id, reason));
+  res.json({ ok: true, ...out });
+}));
+
+/** Cancel every unbilled test / study / procedure of a visit in one go (e.g. the patient leaves without paying). */
+router.post('/billing/visit/:visitId/cancel-unbilled', need('billing.cashier'), wrap(async (req, res) => {
+  const vid = Number(req.params.visitId);
+  const reason = String(req.body?.reason || '').trim();
+  if (reason.length < 3) throw bad('A reason is required');
+  const out = await db.tx(async (client) => {
+    const pend = (await client.query(`SELECT id, description, source FROM "billing"."charges" WHERE visit_id=$1 AND status='Pending' AND is_deleted=false ORDER BY id`, [vid])).rows;
+    const removed = []; const kept = [];
+    for (const c of pend) {
+      await client.query('SAVEPOINT rc');
+      try { await removeChargeTx(client, req, c.id, reason); removed.push(c.description); await client.query('RELEASE SAVEPOINT rc'); }
+      catch (e) { await client.query('ROLLBACK TO SAVEPOINT rc'); kept.push({ description: c.description, why: e.message }); }
+    }
+    return { removed, kept };
+  });
+  res.json({ ok: true, ...out });
+}));
+
+/** Cancel (void) a receipt taken by mistake: posts a matching refund entry. Cashier / manager only. */
+router.post('/billing/payments/:id/void', need('bill_cancel_requests.approve'), wrap(async (req, res) => {
+  const reason = String(req.body?.reason || '').trim();
+  if (reason.length < 5) throw bad('Enter a reason for cancelling this receipt');
+  const out = await db.tx(async (client) => {
+    await billing.assertDayOpen(client);
+    const p = (await client.query(`SELECT * FROM "billing"."payments" WHERE id=$1 AND is_deleted=false FOR UPDATE`, [Number(req.params.id)])).rows[0];
+    if (!p) throw notFound('Receipt not found');
+    if (p.kind !== 'Payment') throw conflict('Only a payment receipt can be cancelled');
+    if (p.method === 'Deposit') throw conflict('A receipt paid from a deposit cannot be cancelled here');
+    const dup = (await client.query(`SELECT 1 FROM "billing"."payments" WHERE invoice_id=$1 AND kind='Refund' AND reference=$2 AND is_deleted=false`, [p.invoice_id, `VOID ${p.receipt_no}`])).rows.length;
+    if (dup) throw conflict('This receipt is already cancelled');
+    const session = (await client.query(`SELECT id FROM "billing"."cashier_sessions" WHERE user_id=$1 AND status='Open' AND is_deleted=false ORDER BY id DESC LIMIT 1`, [req.user.id])).rows[0];
+    if (p.method === 'Cash' && !session) throw conflict('Open your cashier session first: the cash goes back to the patient from your drawer');
+    const code = await db.nextCode(client, 'RCP', 6);
+    await client.query(
+      `INSERT INTO "billing"."payments"("receipt_no","invoice_id","patient_id","kind","amount","method","reference","cashier_id","session_id","paid_at","created_by","updated_by")
+       VALUES ($1,$2,$3,'Refund',$4,$5,$6,$7,$8,now(),$7,$7)`, [code, p.invoice_id, p.patient_id, p.amount, p.method, `VOID ${p.receipt_no}`, req.user.id, session ? session.id : null]);
+    const st = await billing.refreshInvoice(client, p.invoice_id);
+    const inv = (await client.query(`SELECT visit_id FROM "billing"."invoices" WHERE id=$1`, [p.invoice_id])).rows[0];
+    if (inv && inv.visit_id) await client.query(`UPDATE "scheduling"."visits" SET status='Billing', closed_at=NULL, updated_at=now() WHERE id=$1 AND status='Completed'`, [inv.visit_id]);
+    await audit(client, req.user, 'PAYMENT_VOID', 'payments', p.id, { receipt: p.receipt_no, amount: p.amount, method: p.method, reason }, req.ip);
+    return { receipt_no: code, ...st };
   });
   res.json({ ok: true, ...out });
 }));
@@ -145,7 +194,7 @@ router.post('/billing/invoices/:id/pay', need('billing.cashier'), wrap(async (re
   res.json({ ...out, bundle: await invoiceBundle(Number(req.params.id)) });
 }));
 
-router.post('/billing/invoices/:id/cancel', need('billing.approve_discount'), wrap(async (req, res) => {
+router.post('/billing/invoices/:id/cancel', need('billing.cashier'), wrap(async (req, res) => {
   const reason = String(req.body.reason || '').trim();
   if (reason.length < 5) throw bad('Enter a reason for cancelling the invoice');
   await db.tx(async (client) => {
@@ -158,6 +207,62 @@ router.post('/billing/invoices/:id/cancel', need('billing.approve_discount'), wr
     await client.query(`UPDATE "billing"."invoices" SET status='Cancelled', notes = COALESCE(notes,'') || $2, updated_at=now() WHERE id=$1`, [inv.id, ` [Cancelled: ${reason}]`]);
     await client.query(`UPDATE "billing"."charges" SET status='Pending', invoice_id=NULL, updated_at=now() WHERE invoice_id=$1 AND status='Invoiced'`, [inv.id]);
     await audit(client, req.user, 'INVOICE_CANCEL', 'invoices', inv.id, { reason }, req.ip);
+  });
+  res.json({ ok: true });
+}));
+
+/* ---- day close ---- */
+async function daySummary(client, date) {
+  const q = (sql, a) => client.query(sql, a);
+  const pay = (await q(`SELECT method, kind, COALESCE(SUM(amount),0) amt, COUNT(*)::int n FROM "billing"."payments" WHERE paid_at::date=$1::date AND is_deleted=false GROUP BY method, kind`, [date])).rows;
+  const sum = (m, k) => round2(pay.filter((r) => r.method === m && r.kind === k).reduce((a, r) => a + Number(r.amt), 0));
+  const refunds = round2(pay.filter((r) => r.kind === 'Refund').reduce((a, r) => a + Number(r.amt), 0));
+  const cash = round2(sum('Cash', 'Payment') - sum('Cash', 'Refund'));
+  const card = round2(sum('Card', 'Payment') - sum('Card', 'Refund'));
+  const bank = round2(sum('Bank transfer', 'Payment') - sum('Bank transfer', 'Refund'));
+  const online = round2(sum('Online', 'Payment') + sum('Deposit', 'Payment') - sum('Online', 'Refund') - sum('Deposit', 'Refund'));
+  const payments_count = pay.filter((r) => r.kind === 'Payment').reduce((a, r) => a + r.n, 0);
+  const inv = (await q(`SELECT COUNT(*)::int n, COALESCE(SUM(net),0) total FROM "billing"."invoices" WHERE invoice_date=$1::date AND status<>'Cancelled' AND is_deleted=false`, [date])).rows[0];
+  const sessions = (await q(`SELECT s.id, s.status, s.opened_at, s.closed_at, s.opening_cash, s.expected_cash, s.closing_cash, s.variance, u.full_name AS cashier
+      FROM "billing"."cashier_sessions" s LEFT JOIN "auth"."users" u ON u.id=s.user_id WHERE s.opened_at::date=$1::date OR s.status='Open' AND s.is_deleted=false ORDER BY s.id`, [date])).rows;
+  const open_sessions = sessions.filter((s) => s.status === 'Open').length;
+  const unpaid = (await q(`SELECT COUNT(*)::int n, COALESCE(SUM(balance),0) amt FROM "billing"."invoices" WHERE status IN ('Issued','Partially Paid') AND balance > 0.005 AND is_deleted=false`)).rows[0];
+  const pending = (await q(`SELECT COUNT(*)::int n FROM "billing"."charges" WHERE status='Pending' AND is_deleted=false`)).rows[0];
+  const closed = (await q(`SELECT d.*, u.full_name AS closed_by_name FROM "billing"."day_closes" d LEFT JOIN "auth"."users" u ON u.id=d.closed_by WHERE d.close_date=$1::date AND d.is_deleted=false`, [date])).rows[0] || null;
+  return { date, cash, card, bank, online, refunds, net: round2(cash + card + bank + online), payments_count, invoices_count: inv.n, invoices_total: Number(inv.total),
+    sessions, open_sessions, unpaid_invoices: unpaid.n, unpaid_amount: Number(unpaid.amt), pending_charges: pending.n, closed };
+}
+
+router.get('/billing/day-close/summary', need('billing.day_close'), wrap(async (req, res) => {
+  const d = String(req.query.date || '').match(/^\d{4}-\d{2}-\d{2}$/) ? req.query.date : today();
+  res.json(await daySummary(db, d));
+}));
+
+router.post('/billing/day-close', need('billing.day_close'), wrap(async (req, res) => {
+  const out = await db.tx(async (client) => {
+    const date = today();
+    const sm = await daySummary(client, date);
+    if (sm.closed && sm.closed.status === 'Closed') throw conflict('Today is already closed');
+    if (sm.open_sessions) throw conflict(`${sm.open_sessions} cashier session(s) are still open. Close them first.`);
+    const vals = [date, sm.cash, sm.card, sm.bank, sm.online, sm.refunds, sm.net, sm.invoices_count, sm.payments_count, req.body.counted_cash == null || req.body.counted_cash === '' ? null : Number(req.body.counted_cash), req.body.notes || null, req.user.id];
+    if (sm.closed) {
+      await client.query(`UPDATE "billing"."day_closes" SET status='Closed', cash_total=$2, card_total=$3, bank_total=$4, online_total=$5, refund_total=$6, net_total=$7, invoices_count=$8, payments_count=$9, counted_cash=$10, notes=$11, closed_by=$12, closed_at=now(), updated_by=$12, updated_at=now() WHERE close_date=$1::date`, vals);
+    } else {
+      await client.query(`INSERT INTO "billing"."day_closes"("close_date","cash_total","card_total","bank_total","online_total","refund_total","net_total","invoices_count","payments_count","counted_cash","notes","closed_by","closed_at","status","created_by","updated_by") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),'Closed',$12,$12)`, vals);
+    }
+    await audit(client, req.user, 'DAY_CLOSE', 'day_closes', null, { date, net: sm.net, cash: sm.cash }, req.ip);
+    return daySummary(client, date);
+  });
+  res.json(out);
+}));
+
+router.post('/billing/day-close/reopen', need('billing.day_reopen'), wrap(async (req, res) => {
+  const reason = String(req.body?.reason || '').trim();
+  if (reason.length < 5) throw bad('Enter a reason for reopening the day');
+  await db.tx(async (client) => {
+    const r = await client.query(`UPDATE "billing"."day_closes" SET status='Reopened', reopened_by=$1, reopen_reason=$2, updated_at=now() WHERE close_date=CURRENT_DATE AND status='Closed' AND is_deleted=false`, [req.user.id, reason]);
+    if (!r.rowCount) throw conflict('Today is not closed');
+    await audit(client, req.user, 'DAY_REOPEN', 'day_closes', null, { reason }, req.ip);
   });
   res.json({ ok: true });
 }));
@@ -176,6 +281,7 @@ router.get('/billing/session/current', need('billing.cashier'), wrap(async (req,
 router.post('/billing/session/open', need('billing.cashier'), wrap(async (req, res) => {
   const opening = Number(req.body.opening_cash || 0);
   if (!(opening >= 0)) throw bad('Opening cash must be zero or more');
+  await billing.assertDayOpen(db);
   const ex = (await db.query(`SELECT 1 FROM "billing"."cashier_sessions" WHERE user_id=$1 AND status='Open' AND is_deleted=false`, [req.user.id])).rows.length;
   if (ex) throw conflict('You already have an open session');
   const id = (await db.query(

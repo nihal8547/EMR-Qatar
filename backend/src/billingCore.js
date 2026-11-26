@@ -164,8 +164,15 @@ async function reprice(client, invoiceId, { discountPct }) {
   return split;
 }
 
+/** Money cannot move once the day is closed (a manager can reopen it). */
+async function assertDayOpen(client) {
+  const c = (await client.query(`SELECT 1 FROM "billing"."day_closes" WHERE close_date=CURRENT_DATE AND status='Closed' AND is_deleted=false`)).rows.length;
+  if (c) throw conflict('Today is closed (Day Close). A manager must reopen the day before money can be taken or refunded.');
+}
+
 /** Take a payment against the patient share of an invoice. */
 async function payInvoice(client, user, invoiceId, { amount, method, reference }) {
+  await assertDayOpen(client);
   amount = round2(amount);
   if (!(amount > 0)) throw bad('Enter an amount greater than zero');
   if (!['Cash', 'Card', 'Bank transfer', 'Deposit', 'Online'].includes(method)) throw bad('Choose a payment method');
@@ -198,4 +205,4 @@ async function payInvoice(client, user, invoiceId, { amount, method, reference }
   return { payment_id: pid, receipt_no: receipt, ...state };
 }
 
-module.exports = { settleVisit, computeSplit, refreshInvoice, createOrRefreshInvoice, reprice, payInvoice, corporateOutstanding };
+module.exports = { assertDayOpen, settleVisit, computeSplit, refreshInvoice, createOrRefreshInvoice, reprice, payInvoice, corporateOutstanding };

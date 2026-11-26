@@ -42,7 +42,7 @@ const ROLES = [
   {
     name: 'Hospital Manager', description: 'Read-only oversight of every area, approvals, all reports', restrict: false, discount: 20,
     perms: [
-      ...reg.order.map((k) => `${k}:v`), 'dashboard.view', 'pricing.view', 'reports.view', 'reports.finance', 'billing.approve_discount', 'patients.360', 'visits.manage',
+      ...reg.order.map((k) => `${k}:v`), 'dashboard.view', 'pricing.view', 'reports.view', 'reports.finance', 'billing.approve_discount', 'patients.360', 'visits.manage', 'billing.day_close', 'billing.day_reopen', 'day_closes:v',
       'refunds:v+approve+reject', 'bill_cancel_requests:v+approve+reject', 'credit_notes:v+approve', 'discount_approvals:v+approve+reject', 'write_offs:v+approve+reject', 'leaves:v+approve+reject',
       'dental.chart', 'requisitions:v+approve+reject', 'purchase_orders:v+approve+cancel', 'payroll_runs:v+approve', 'users:vced', 'roles:v', 'audit_log:v',
     ],
@@ -100,7 +100,7 @@ const ROLES = [
   {
     name: 'Cashier', description: 'Invoices, payments, deposits, refund requests, cashier session', restrict: false, discount: 5,
     perms: [
-      'dashboard.view', 'pricing.view', 'billing.cashier', 'walkin.create', 'billing.discount', 'queue.view', 'patients:v', 'visits:v', 'services:v', 'packages:v', 'package_items:v', 'price_lists:v', 'price_list_items:v',
+      'dashboard.view', 'pricing.view', 'billing.cashier', 'billing.day_close', 'day_closes:v', 'walkin.create', 'billing.discount', 'queue.view', 'patients:v', 'visits:v', 'services:v', 'packages:v', 'package_items:v', 'price_lists:v', 'price_list_items:v',
       'charges:vce', 'invoices:v', 'payments:v', 'deposits:vc', 'refunds:vc', 'credit_notes:vc', 'bill_cancel_requests:v+approve+reject', 'cashier_sessions:v', 'discount_approvals:vc',
       'policy_members:v', 'payers:v', 'plans:v', 'corporate_accounts:v', 'guarantee_letters:v', 'pre_auths:v', 'users:v', ...LOOKUPS,
     ],
@@ -117,7 +117,7 @@ const ROLES = [
   {
     name: 'Accountant', description: 'Finance: ledger, journals, vendor bills, bank, finance reports', restrict: false, discount: 0,
     perms: [
-      'dashboard.view', 'pricing.view', 'pricing.edit', 'reports.view', 'reports.finance', 'invoices:v', 'payments:v', 'refunds:v', 'credit_notes:v', 'cashier_sessions:v', 'claims:v', 'remittances:v', 'write_offs:v',
+      'dashboard.view', 'pricing.view', 'pricing.edit', 'reports.view', 'reports.finance', 'billing.day_close', 'day_closes:v', 'invoices:v', 'payments:v', 'refunds:v', 'credit_notes:v', 'cashier_sessions:v', 'claims:v', 'remittances:v', 'write_offs:v',
       'ledger_accounts:vce', 'journals:vce+post', 'journal_lines:vced', 'vendor_bills:vce', 'vendor_payments:vc', 'bank_accounts:vce', 'bank_statement_lines:vced',
       'suppliers:v', 'purchase_orders:v', 'grns:v', 'doctor_revenue_share:vce', 'payslips:v', 'users:v', ...LOOKUPS,
     ],
