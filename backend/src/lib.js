@@ -77,6 +77,15 @@ async function priceFor(client, serviceId, visit) {
  * Post a charge to the visit bill. If the service needs pre-authorisation and the visit is
  * an insurance visit, a pre-auth request is raised automatically (once per visit + service).
  */
+/** Next token for a doctor (or the walk-in queue when doctorId is null) on a day. Locked per doctor+day so two receptionists never get the same number. */
+async function nextToken(client, doctorId, date, walkin = false) {
+  const day = date instanceof Date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : date ? String(date).slice(0, 10) : (await client.query('SELECT CURRENT_DATE::text d')).rows[0].d;
+  await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`token:${walkin ? 'walkin' : doctorId}:${day}`]);
+  const where = walkin ? `visit_type='Walk-in'` : `doctor_id=$2`;
+  const args = walkin ? [day] : [day, doctorId];
+  return Number((await client.query(`SELECT COALESCE(MAX(token_no),0)+1 AS t FROM "scheduling"."visits" WHERE visit_date=$1::date AND ${where} AND is_deleted=false`, args)).rows[0].t);
+}
+
 async function addCharge(client, { visit, service_id, qty = 1, source = 'Manual', source_id = null, description, unit_price, user }) {
   const { price, service } = await priceFor(client, service_id, visit);
   const unit = unit_price !== undefined && unit_price !== null ? round2(unit_price) : price;
@@ -129,4 +138,4 @@ function allergyMatches(allergen, genericName, brandName) {
   return false;
 }
 
-module.exports = { allergyMatches, HttpError, bad, forbidden, notFound, conflict, wrap, today, round2, can, need, audit, getVisit, priceFor, addCharge, cancelCharges };
+module.exports = { nextToken, allergyMatches, HttpError, bad, forbidden, notFound, conflict, wrap, today, round2, can, need, audit, getVisit, priceFor, addCharge, cancelCharges };

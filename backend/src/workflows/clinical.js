@@ -3,7 +3,7 @@
 const express = require('express');
 const db = require('../db');
 const crud = require('../crud');
-const { allergyMatches, wrap, bad, forbidden, notFound, conflict, need, can, audit, today, getVisit, addCharge, cancelCharges } = require('../lib');
+const { allergyMatches, wrap, bad, forbidden, notFound, conflict, need, can, audit, today, getVisit, addCharge, cancelCharges, nextToken } = require('../lib');
 
 const vp = require('../visitPricing');
 
@@ -73,8 +73,7 @@ router.post('/visits/start', need('visits.start'), wrap(async (req, res) => {
       if (discStatus === 'Pending approval') warnings.push(`Discount of ${discount.type === 'percent' ? discount.value + '%' : 'QAR ' + discount.value} is above your limit and waits for manager approval. Until then the bill is at full price.`);
     }
 
-    const tok = (await client.query(
-      `SELECT COALESCE(MAX(token_no),0)+1 AS t FROM "scheduling"."visits" WHERE doctor_id=$1 AND visit_date=CURRENT_DATE AND is_deleted=false`, [doctor.id])).rows[0].t;
+    const tok = await nextToken(client, doctor.id, null);
     const visit_no = await db.nextCode(client, 'VIS', 6);
     const vid = (await client.query(
       `INSERT INTO "scheduling"."visits"("visit_no","patient_id","doctor_id","department_id","visit_date","visit_type","status","payer_type","policy_id","corporate_id",
@@ -102,7 +101,7 @@ router.post('/visits/start', need('visits.start'), wrap(async (req, res) => {
     } else warnings.push('No consultation service found in the price list; no consultation charge was added.');
 
     await audit(client, req.user, 'VISIT_START', 'visits', vid, { visit_no, payer_type, discount: discount ? { ...discount, status: discStatus } : undefined }, req.ip);
-    return { id: vid, visit_no, token_no: tok, eligibility, warnings, discount_status: discStatus };
+    return { id: vid, visit_no, token_no: tok, doctor_name: doctor.full_name, eligibility, warnings, discount_status: discStatus };
   });
   res.status(201).json(out);
 }));

@@ -50,7 +50,7 @@ router.post('/walkin', need('walkin.create'), wrap(async (req, res) => {
     if (tests.length !== testIds.length) throw bad('One of the tests is not available');
     const studies = studyIds.length ? (await client.query(`SELECT id FROM "billing"."services" WHERE id = ANY($1::bigint[]) AND category='Radiology' AND active AND is_deleted=false`, [studyIds])).rows : [];
     if (studies.length !== studyIds.length) throw bad('One of the studies is not available');
-    const tok = (await client.query(`SELECT COALESCE(MAX(token_no),0)+1 AS t FROM "scheduling"."visits" WHERE visit_type='Walk-in' AND visit_date=CURRENT_DATE AND is_deleted=false`)).rows[0].t;
+    const tok = await require('../lib').nextToken(client, null, null, true);
     const visit_no = await db.nextCode(client, 'VIS', 6);
     const vid = (await client.query(
       `INSERT INTO "scheduling"."visits"("visit_no","patient_id","doctor_id","visit_date","visit_type","status","payer_type","eligibility_status","token_no","complaint","referred_by","created_by","updated_by")
