@@ -17,7 +17,7 @@ async function collectNow() {
     const due = Number(b.invoice.balance)
     if (due > 0) {
       const r: any = await api(`/billing/invoices/${b.invoice.id}/pay`, { method: 'POST', body: { amount: due, method: payNow.method, reference: payNow.reference } })
-      payNow.done = { amount: due, receipt: r.receipt_no, invoice_id: b.invoice.id }
+      payNow.done = { amount: due, receipt: r.receipt_no, invoice_id: b.invoice.id, payment_id: r.payment_id }
       ok(`Payment received ${money(due)} · ${r.receipt_no}`)
     } else { payNow.done = { amount: 0, receipt: null, invoice_id: b.invoice.id }; ok('Nothing to pay now (covered by the payer)') }
   } catch (e) { err(e) } finally { payNow.busy = false }
@@ -87,9 +87,9 @@ async function decide(v: any, approve: boolean) { try { await api(`/visits/${v.i
       <p v-if="result.discount_status">Discount: <span class="badge" :class="badgeClass(result.discount_status === 'Applied' ? 'approved' : 'pending')">{{ result.discount_status }}</span></p>
       <div v-for="w in result.warnings" :key="w" class="alert warn">{{ w }}</div>
       <div v-if="can('billing.cashier')" class="card" style="background:#fafbfc"><h3 style="margin-top:0">Payment</h3>
-        <div v-if="payNow.done" class="alert ok">{{ payNow.done.amount > 0 ? `Received ${money(payNow.done.amount)} · receipt ${payNow.done.receipt}` : 'Nothing to pay now — covered by the payer.' }} <NuxtLink :to="`/print/invoice/${payNow.done.invoice_id}`" class="btn sm">🖨 Print bill / receipt</NuxtLink></div>
+        <div v-if="payNow.done" class="alert ok">{{ payNow.done.amount > 0 ? `Received ${money(payNow.done.amount)} · receipt ${payNow.done.receipt}` : 'Nothing to pay now — covered by the payer.' }} <NuxtLink :to="`/print/invoice/${payNow.done.invoice_id}`" class="btn sm">🖨 Print bill</NuxtLink><NuxtLink v-if="payNow.done.payment_id" :to="`/print/receipt/${payNow.done.payment_id}`" class="btn sm">🖨 Receipt</NuxtLink></div>
         <div v-else class="bar"><select v-model="payNow.method" style="width:140px"><option>Cash</option><option>Card</option><option>Bank transfer</option><option>Online</option></select><input v-model="payNow.reference" placeholder="Reference (card slip)" style="width:180px" /><button class="ok" :disabled="payNow.busy" @click="collectNow">Collect payment now</button><span class="small muted">Creates the invoice for this check-in and receives the patient's share (after discount / insurance). Cash needs your cashier session open.</span></div></div>
-      <div class="bar"><NuxtLink v-if="can('vitals.create')" :to="`/r/vitals/new?visit_id=${result.id}`" class="btn p">Record vitals</NuxtLink><NuxtLink to="/queue" class="btn">Queue board</NuxtLink><button @click="reset">Start another visit</button></div>
+      <div class="bar"><NuxtLink :to="`/print/token/${result.id}?auto=1`" class="btn p">🖨 Print token slip</NuxtLink><NuxtLink v-if="can('vitals.create')" :to="`/r/vitals/new?visit_id=${result.id}`" class="btn">Record vitals</NuxtLink><NuxtLink to="/queue" class="btn">Queue board</NuxtLink><button @click="reset">Start another visit</button></div>
     </div>
     <div v-else class="grid" style="grid-template-columns:2fr 1fr;align-items:start">
       <div class="card">

@@ -110,7 +110,11 @@ const statusField = computed(() => fields.value.find((f) => f.name === 'status')
         <NuxtLink v-if="key === 'lab_orders'" :to="`/print/lab/${idParam}`" class="btn">🖨 Lab report</NuxtLink>
         <NuxtLink v-if="key === 'prescriptions'" :to="`/print/rx/${idParam}`" class="btn">🖨 Print prescription</NuxtLink>
         <NuxtLink v-if="key === 'pharmacy_dispenses'" :to="`/print/dispense/${idParam}`" class="btn">🖨 Slip &amp; receipt</NuxtLink><NuxtLink v-if="key === 'pharmacy_dispenses'" :to="`/print/dispense/${idParam}?mode=labels`" class="btn">🏷 Labels</NuxtLink>
-        <NuxtLink v-if="!['invoices', 'lab_orders', 'prescriptions', 'pharmacy_dispenses'].includes(key)" :to="`/print/doc/${key}/${idParam}`" class="btn">🖨 Print</NuxtLink>
+        <NuxtLink v-if="key === 'imaging_orders'" :to="`/print/imaging/${idParam}`" class="btn">🖨 Radiology report</NuxtLink>
+        <NuxtLink v-if="key === 'patients'" :to="`/print/patient-card/${idParam}`" class="btn">🖨 Patient card</NuxtLink>
+        <NuxtLink v-if="key === 'payments'" :to="`/print/receipt/${idParam}`" class="btn">🖨 Receipt</NuxtLink>
+        <template v-if="key === 'visits'"><NuxtLink :to="`/print/token/${idParam}`" class="btn">🖨 Token slip</NuxtLink><NuxtLink v-if="can('lab_orders.view')" :to="`/print/results/${idParam}`" class="btn">🖨 Test results</NuxtLink><NuxtLink v-if="can('patients.360')" :to="`/print/visit-summary/${idParam}`" class="btn">🖨 Visit summary</NuxtLink></template>
+        <NuxtLink v-if="!['invoices', 'lab_orders', 'prescriptions', 'pharmacy_dispenses', 'imaging_orders', 'patients', 'payments'].includes(key)" :to="`/print/doc/${key}/${idParam}`" class="btn">🖨 Print</NuxtLink>
         <NuxtLink v-if="key === 'visits' && can('billing.cashier')" :to="`/cashier?visit=${idParam}`" class="btn">Billing</NuxtLink>
         <button v-for="a in m.actions" :key="a.name" :disabled="busy" @click="runAction(a)">{{ a.label }}</button>
         <button v-if="canEdit && !editing" @click="editing = true">Edit</button>

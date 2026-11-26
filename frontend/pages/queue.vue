@@ -32,7 +32,7 @@ async function move(v: any, status: string) {
             <NuxtLink v-if="can('consult.use')" :to="`/consult/${v.id}`" class="btn sm">Consult</NuxtLink>
             <NuxtLink v-if="can('billing.cashier')" :to="`/cashier?visit=${v.id}`" class="btn sm">Bill</NuxtLink>
             <NuxtLink v-if="can('patients.360')" :to="`/patient/${v.patient_id}`" class="btn sm">360</NuxtLink>
-            <NuxtLink v-if="can('visits.manage')" :to="`/visit-manage?visit=${v.id}`" class="btn sm">Manage</NuxtLink>
+            <NuxtLink :to="`/print/token/${v.id}`" class="btn sm" title="Print token slip">🖨</NuxtLink><NuxtLink v-if="can('visits.manage')" :to="`/visit-manage?visit=${v.id}`" class="btn sm">Manage</NuxtLink>
           </div>
           <select v-if="v.status !== 'Completed'" style="margin-top:6px;font-size:12px" :value="v.status" @change="move(v, ($event.target as HTMLSelectElement).value)">
             <option v-for="s in [...cols.slice(0, 6), 'Completed', ...(can('visits.manage') ? ['Cancelled'] : [])]" :key="s" :value="s">{{ s === v.status ? 'Status: ' + s : '→ ' + s }}</option>

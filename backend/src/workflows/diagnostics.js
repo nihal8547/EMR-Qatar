@@ -178,6 +178,43 @@ router.get('/lab/orders/:id/report', need('lab_orders.view'), wrap(async (req, r
   res.json({ order: o, items, centre: Object.fromEntries(s.map((r) => [r.key, r.value])) });
 }));
 
+/** Printable imaging report (the reported study with findings and impression). */
+router.get('/imaging/orders/:id/report', need('imaging_orders.view'), wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const o = (await db.query(
+    `SELECT o.id, o.order_no, o.status, o.priority, o.clinical_info, o.ordered_at, o.visit_id, s.name AS study, m.name AS modality,
+            p.mrn, p.full_name, p.dob, p.gender, p.qid, d.full_name AS doctor
+       FROM "radiology"."imaging_orders" o JOIN "billing"."services" s ON s.id=o.service_id LEFT JOIN "radiology"."imaging_modalities" m ON m.id=o.modality_id
+       JOIN "mpi"."patients" p ON p.id=o.patient_id LEFT JOIN "auth"."users" d ON d.id=o.doctor_id WHERE o.id=$1 AND o.is_deleted=false`, [id])).rows[0];
+  if (!o) throw notFound('Order not found');
+  const reports = (await db.query(
+    `SELECT r.findings, r.impression, r.status, r.reported_at, u.full_name AS reported_by FROM "radiology"."imaging_reports" r LEFT JOIN "auth"."users" u ON u.id=r.reported_by
+      WHERE r.order_id=$1 AND r.is_deleted=false ORDER BY r.id DESC`, [id])).rows;
+  const s = (await db.query(`SELECT key, value FROM "admin"."settings" WHERE key IN ('centre_name','centre_address','centre_phone') AND is_deleted=false`)).rows;
+  await audit(null, req.user, 'IMAGING_REPORT_VIEW', 'imaging_orders', id, null, req.ip);
+  res.json({ order: o, report: reports.find((r) => r.status === 'Final') || reports[0] || null, centre: Object.fromEntries(s.map((r) => [r.key, r.value])) });
+}));
+
+/** Every validated lab result and final imaging report of one visit, for a single combined printout. */
+router.get('/visits/:id/results', need('lab_orders.view'), wrap(async (req, res) => {
+  const vid = Number(req.params.id);
+  const v = (await db.query(
+    `SELECT v.id, v.visit_no, v.visit_date, v.visit_type, p.mrn, p.full_name, p.dob, p.gender, p.qid, d.full_name AS doctor
+       FROM "scheduling"."visits" v JOIN "mpi"."patients" p ON p.id=v.patient_id LEFT JOIN "auth"."users" d ON d.id=v.doctor_id WHERE v.id=$1 AND v.is_deleted=false`, [vid])).rows[0];
+  if (!v) throw notFound('Visit not found');
+  const lab = (await db.query(
+    `SELECT o.order_no, t.name AS test, t.unit, t.ref_low, t.ref_high, i.result_value, i.result_text, i.flag, i.validated_at
+       FROM "lab"."lab_orders" o JOIN "lab"."lab_order_items" i ON i.order_id=o.id AND i.status='Validated' AND i.is_deleted=false JOIN "lab"."lab_tests" t ON t.id=i.test_id
+      WHERE o.visit_id=$1 AND o.is_deleted=false ORDER BY o.id, i.id`, [vid])).rows;
+  const imaging = can(req, 'imaging_orders.view') ? (await db.query(
+    `SELECT o.order_no, s.name AS study, r.findings, r.impression, r.reported_at, u.full_name AS reported_by
+       FROM "radiology"."imaging_orders" o JOIN "billing"."services" s ON s.id=o.service_id JOIN "radiology"."imaging_reports" r ON r.order_id=o.id AND r.status='Final' AND r.is_deleted=false LEFT JOIN "auth"."users" u ON u.id=r.reported_by
+      WHERE o.visit_id=$1 AND o.is_deleted=false ORDER BY o.id`, [vid])).rows : [];
+  const s = (await db.query(`SELECT key, value FROM "admin"."settings" WHERE key IN ('centre_name','centre_address','centre_phone') AND is_deleted=false`)).rows;
+  await audit(null, req.user, 'RESULTS_PRINT', 'visits', vid, null, req.ip);
+  res.json({ visit: v, lab, imaging, centre: Object.fromEntries(s.map((r) => [r.key, r.value])) });
+}));
+
 /* ---------------- Radiology ---------------- */
 router.get('/radiology/worklist', need('imaging_orders.view'), wrap(async (req, res) => {
   const { rows } = await db.query(

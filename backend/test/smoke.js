@@ -526,6 +526,17 @@ const section = (t) => console.log(`\n== ${t}`);
   ok('payments work again after reopen', (await call(tk.reception, 'POST', `/billing/invoices/${vpI.data.invoice.id}/pay`, { amount: 5, method: 'Card' })).status === 200);
 
 
+  section('Print data endpoints');
+  const prV = (await call(tk.admin, 'GET', '/r/visits?limit=1&sort=-id')).data.rows[0];
+  const prR = await call(tk.drsara, 'GET', `/visits/${prV.id}/results`);
+  ok('combined results of a visit', prR.status === 200 && Array.isArray(prR.data.lab) && Array.isArray(prR.data.imaging) && prR.data.visit.mrn, prR.status);
+  ok('results print needs lab permission (403)', (await call(tk.cashier, 'GET', `/visits/${prV.id}/results`)).status === 403);
+  ok('missing visit results is 404', (await call(tk.admin, 'GET', '/visits/999999/results')).status === 404);
+  const prI = (await call(tk.admin, 'GET', '/r/imaging_orders?limit=1')).data.rows[0];
+  if (prI) { const x = await call(tk.radiology, 'GET', `/imaging/orders/${prI.id}/report`); ok('imaging report payload', x.status === 200 && x.data.order.study && x.data.centre, x.status); }
+  ok('imaging report needs permission (403)', (await call(tk.reception, 'GET', '/imaging/orders/1/report')).status === 403);
+  ok('token / card / receipt data via generic print', (await call(tk.reception, 'GET', `/print/visits/${prV.id}`)).status === 200 && (await call(tk.reception, 'GET', `/print/patients/${prV.patient_id}`)).status === 200);
+
   section('Server robustness');
   const hl = await call(null, 'GET', '/health');
   ok('health check reports db latency', hl.status === 200 && hl.data.ok && typeof hl.data.db_ms === 'number', hl.data);

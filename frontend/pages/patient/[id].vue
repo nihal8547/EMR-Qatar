@@ -48,7 +48,7 @@ onMounted(() => load())
               <b>{{ fdate(v.visit_date) }}</b><span class="badge grey">{{ v.visit_no }}</span><span class="badge grey">{{ v.visit_type }}</span><span class="badge" :class="badgeClass(v.status)">{{ v.status }}</span>
               <span class="muted small">{{ v.doctor }}<template v-if="v.department"> · {{ v.department }}</template></span>
               <span class="sp"></span><span class="small muted hv-sum">{{ v.diagnoses.map((x: any) => x.description).join('; ') || v.complaint }}</span>
-              <NuxtLink v-if="can('visits.view')" :to="`/r/visits/${v.id}`" class="btn sm no-print" @click.stop>Open</NuxtLink>
+              <NuxtLink :to="`/print/visit-summary/${v.id}`" class="btn sm no-print" title="Print visit summary" @click.stop>🖨 Summary</NuxtLink><NuxtLink v-if="v.labs.length || v.imaging.length" :to="`/print/results/${v.id}`" class="btn sm no-print" title="Print test results" @click.stop>🖨 Results</NuxtLink><NuxtLink v-if="can('visits.view')" :to="`/r/visits/${v.id}`" class="btn sm no-print" @click.stop>Open</NuxtLink>
             </div>
             <div v-show="open[v.id]" class="hv-b">
               <div class="dv" v-if="v.encounter || v.complaint">
