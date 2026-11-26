@@ -25,6 +25,7 @@ export function useAuth() {
   }
   function logout() {
     localStorage.removeItem(TOKEN_KEY)
+    clearOfflineData()
     reset()
     navigateTo('/login')
   }

@@ -11,6 +11,11 @@ export class ApiError extends Error {
 
 export const TOKEN_KEY = 'hms_token'
 
+/** Forget every cached answer (called at logout: patient data must not stay on a shared computer). */
+export function clearOfflineData() {
+  if (import.meta.client) navigator.serviceWorker?.controller?.postMessage('clear-data')
+}
+
 export function useApi() {
   async function api<T = any>(path: string, opts: { method?: string; body?: any; query?: Record<string, any>; raw?: boolean } = {}): Promise<T> {
     const token = import.meta.client ? localStorage.getItem(TOKEN_KEY) : null
@@ -33,12 +38,17 @@ export function useApi() {
     } catch (e: any) {
       const status = e?.response?.status || e?.statusCode || 0
       const data = e?.data || e?.response?._data
+      const offline = import.meta.client && (!navigator.onLine || (status === 0 && !/timeout|aborted/i.test(String(e?.message)) && e?.name !== 'TimeoutError'))
+      if (offline && method !== 'GET') {
+        if (queueable(method, path)) { useOffline().enqueue(method, path, opts.body); return { queued: true } as any }   // saved on this device, sent when online
+        throw new ApiError('You are offline. This action needs a connection, so nothing was saved. Try again when the connection is back.', 0)
+      }
       if (status === 401 && path !== '/auth/login') {
         if (import.meta.client) localStorage.removeItem(TOKEN_KEY)
         useAuth().reset()
         await navigateTo('/login')
       }
-      const msg = (data && typeof data === 'object' && data.error) || (status === 0 ? (e?.name === 'TimeoutError' || /timeout|aborted/i.test(String(e?.message)) ? 'The server took too long to answer. Please try again.' : 'Cannot reach the server. Check your connection.') : status >= 500 ? 'Server problem. Please try again in a moment.' : 'Request failed')
+      const msg = (data && typeof data === 'object' && data.error) || (status === 0 ? (import.meta.client && !navigator.onLine ? 'You are offline. Showing only what was opened before.' : e?.name === 'TimeoutError' || /timeout|aborted/i.test(String(e?.message)) ? 'The server took too long to answer. Please try again.' : 'Cannot reach the server. Check your connection.') : status >= 500 ? 'Server problem. Please try again in a moment.' : 'Request failed')
       throw new ApiError(String(msg), status, data && data.extra)
     }
   }

@@ -89,7 +89,7 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 const STATIC_DIR = process.env.STATIC_DIR || path.join(__dirname, '..', '..', 'frontend', '.output', 'public');
 if (fs.existsSync(path.join(STATIC_DIR, 'index.html'))) {
   app.use('/_nuxt', express.static(path.join(STATIC_DIR, '_nuxt'), { index: false, maxAge: '365d', immutable: true }));   // hashed build files never change
-  app.use(express.static(STATIC_DIR, { index: false, maxAge: '1h' }));
+  app.use(express.static(STATIC_DIR, { index: false, maxAge: '1h', setHeaders: (res, f) => { if (/(sw\.js|precache\.json|manifest\.webmanifest)$/.test(f)) res.setHeader('Cache-Control', 'no-cache'); } }));
   app.get(/^\/(?!api\/).*/, (req, res) => res.sendFile(path.join(STATIC_DIR, '200.html')));
 }
 

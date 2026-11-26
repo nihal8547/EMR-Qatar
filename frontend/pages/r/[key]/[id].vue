@@ -74,6 +74,7 @@ async function save() {
         body.insurance = policies.value
       }
       const r = await api(`/r/${key.value}`, { method: 'POST', body })
+      if (r?.queued) { ok('You are offline: saved on this device and it will be sent automatically when the connection returns'); await navigateTo(`/r/${key.value}`, { replace: true }); return }
       ok('Created'); await navigateTo(`/r/${key.value}/${r.id}`, { replace: true })
     } else {
       const r = await api(`/r/${key.value}/${idParam.value}`, { method: 'PUT', body })

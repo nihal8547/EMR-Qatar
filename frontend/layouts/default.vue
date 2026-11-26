@@ -58,6 +58,7 @@ useHead({ style: [{ key: 'paper', innerHTML: computed(() => (isPrint.value && pa
       </div>
     </aside>
     <div class="main">
+      <OfflineBar />
       <header class="top">
         <button class="burger" @click="open = !open" aria-label="Menu"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
         <div class="crumb"><template v-if="crumb.mod"><span class="mod">{{ crumb.mod }}</span><span class="sep mod">›</span></template><b>{{ crumb.page }}</b></div>

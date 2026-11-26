@@ -58,3 +58,9 @@ Access: 14 roles, permissions per resource (view/create/edit/delete) plus specia
 - Not yet done: Arabic UI / RTL, file upload storage for documents (records metadata only), 2-factor login, automated backups, load testing.
 - Compliance (PDPPL, MOPH licensing, data residency, retention) needs your legal/IT review and hosting decisions. No VAT is charged by default; confirm with your accountant.
 - Set a strong `JWT_SECRET`, change all demo passwords, serve over HTTPS, and back up PostgreSQL.
+
+## Offline support
+- The app is installable (PWA) and a service worker caches the whole app after the first visit, so it opens with no connection (HTTPS or localhost required). Run `npm run build` in `frontend/` (it also writes `precache.json`).
+- Pages and records you opened recently stay readable offline (last 400 answers). They are wiped at logout.
+- New patients and vitals can be entered offline: they are kept on the device and sent automatically when the connection returns (bar at the top shows the queue, with Send now / Retry / Discard). Anything rejected by the server (e.g. duplicate QID) stays in the list for a person to fix.
+- Payments, refunds, day close, results, billing etc. need a live connection and say so clearly; nothing is queued for them on purpose.
