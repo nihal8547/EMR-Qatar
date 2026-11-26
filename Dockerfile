@@ -1,5 +1,5 @@
 # ---- build the Nuxt app ----
-FROM node:20-alpine AS web
+FROM node:22-alpine AS web
 WORKDIR /web
 COPY frontend/package*.json ./
 RUN npm install --no-audit --no-fund
@@ -7,7 +7,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # ---- runtime: API + built frontend ----
-FROM node:20-alpine
+FROM node:22-alpine
 ENV NODE_ENV=production PORT=4000
 WORKDIR /app/backend
 COPY backend/package*.json ./
