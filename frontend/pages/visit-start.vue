@@ -82,7 +82,7 @@ async function decide(v: any, approve: boolean) { try { await api(`/visits/${v.i
   <div>
     <h1>Start Visit (Check-in)</h1>
     <div v-if="result" class="card">
-      <div class="alert ok"><b>Visit {{ result.visit_no }}</b> started. Token <b>#{{ result.token_no }}</b>.</div>
+      <div class="alert ok"><b>Visit {{ result.visit_no }}</b> started. Token <b style="font-size:20px">#{{ result.token_no }}</b><span v-if="result.doctor_name"> with <b>{{ result.doctor_name }}</b></span>. The doctor sees this token in the consultation queue.</div>
       <p v-if="f.payer_type === 'Insurance'">Eligibility: <span class="badge" :class="badgeClass(result.eligibility)">{{ result.eligibility }}</span> <span class="muted small">(simulated check against the policy dates and status)</span></p>
       <p v-if="result.discount_status">Discount: <span class="badge" :class="badgeClass(result.discount_status === 'Applied' ? 'approved' : 'pending')">{{ result.discount_status }}</span></p>
       <div v-for="w in result.warnings" :key="w" class="alert warn">{{ w }}</div>

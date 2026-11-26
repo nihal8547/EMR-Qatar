@@ -4,7 +4,7 @@ const express = require('express');
 const db = require('../db');
 const ops = require('../visitOps');
 const vp = require('../visitPricing');
-const { wrap, bad, conflict, notFound, need, audit, today, getVisit, priceFor, round2 } = require('../lib');
+const { wrap, bad, conflict, notFound, need, audit, today, getVisit, priceFor, round2, nextToken } = require('../lib');
 
 const router = express.Router();
 const guard = need('visits.manage');
@@ -23,7 +23,7 @@ router.post('/visits/:id/change-doctor', guard, wrap(async (req, res) => {
       `SELECT u.id, u.full_name, u.department_id FROM "auth"."users" u JOIN "auth"."roles" r ON r.id=u.role_id WHERE u.id=$1 AND r.name='Doctor' AND u.active AND NOT u.is_deleted`, [req.body?.doctor_id])).rows[0];
     if (!doc) throw bad('Select a doctor');
     if (Number(doc.id) === Number(v.doctor_id)) throw bad('This visit is already with that doctor');
-    const tok = (await client.query(`SELECT COALESCE(MAX(token_no),0)+1 AS t FROM "scheduling"."visits" WHERE doctor_id=$1 AND visit_date=$2 AND is_deleted=false`, [doc.id, v.visit_date])).rows[0].t;
+    const tok = await nextToken(client, doc.id, v.visit_date);
     const dept = req.body?.keep_department ? v.department_id : (doc.department_id || v.department_id);
     await client.query(`UPDATE "scheduling"."visits" SET doctor_id=$2, department_id=$3, token_no=$4, updated_at=now(), updated_by=$5 WHERE id=$1`, [v.id, doc.id, dept, tok, req.user.id]);
     await client.query(`UPDATE "clinical"."encounters" SET doctor_id=$2, updated_at=now() WHERE visit_id=$1 AND status='Open' AND is_deleted=false`, [v.id, doc.id]);
