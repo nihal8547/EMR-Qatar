@@ -110,6 +110,8 @@ async function fetchOne(clientOrPool, res, id) {
   return rows[0] ? cleanRow(res, rows[0]) : null;
 }
 
+const maskSecret = (row) => { if (row && row.key === 'evolution_api_key' && row.value) row.value = '••••••••'; };
+
 /* ---------- list ---------- */
 function buildWhere(res, query) {
   const where = ['t."is_deleted" = false'];
@@ -263,6 +265,7 @@ router.get('/r/:key', wrap(async (req, res) => {
   const r = getRes(req.params.key);
   if (!can(req, `${r.key}.view`)) throw forbidden();
   const out = await list(r, req.query);
+  if (r.key === 'settings') out.rows.forEach(maskSecret);
   if (req.query.format === 'csv') {
     const cols = r.fields.filter((f) => !f.secret && f.type !== 'password');
     const esc = (v) => {
@@ -285,6 +288,7 @@ router.get('/r/:key/:id', wrap(async (req, res) => {
   if (!can(req, `${r.key}.view`)) throw forbidden();
   const row = await fetchOne(db, r, Number(req.params.id));
   if (!row) throw notFound();
+  if (r.key === 'settings') maskSecret(row);
   res.json(row);
 }));
 
@@ -367,6 +371,7 @@ router.put('/r/:key/:id', wrap(async (req, res) => {
   await db.tx(async (client) => {
     const existing = await fetchOne(client, r, id);
     if (!existing) throw notFound();
+    if (r.key === 'settings' && existing.key === 'evolution_api_key') throw forbidden('Change the Evolution API key on the WhatsApp Connect page');
     const data = prepare(r, req.body, 'update');
     const ctx = { res: r, data, user: req.user, client, mode: 'update', existing, body: req.body, query: req.query, id };
     await hooks.run(r.hooks.before, ctx);

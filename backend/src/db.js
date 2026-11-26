@@ -55,4 +55,18 @@ async function nextCode(client, prefix, pad = 6) {
   return `${prefix}-${String(rows[0].value).padStart(pad, '0')}`;
 }
 
-module.exports = { pool, query, tx, nextCode };
+/**
+ * HMS must live in its OWN database. Refuse to run (and above all to `--reset`, which drops schemas) against a database that
+ * belongs to n8n or any other application, so the HMS and n8n can never overwrite each other's data.
+ */
+async function assertDedicatedDb() {
+  const r = await pool.query(`SELECT current_database() AS db,
+      EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('workflow_entity','credentials_entity','execution_entity')) AS n8n`);
+  const { db, n8n } = r.rows[0];
+  if (n8n || /n8n/i.test(db)) {
+    throw new Error(`Refusing to use database "${db}": it looks like an n8n database. Give the HMS its own database (e.g. qatar_hms) in DATABASE_URL.`);
+  }
+  return db;
+}
+
+module.exports = { pool, query, tx, nextCode, assertDedicatedDb };

@@ -204,3 +204,8 @@ td button.sm,td .btn.sm{margin-right:4px}td button.sm:last-child{margin-right:0}
 .pay-card button.ok{padding:10px 20px;font-size:14px;font-weight:600}
 .method-pills{display:flex;gap:6px;flex-wrap:wrap}
 .method-pills button{border-radius:99px;padding:6px 16px}.method-pills button.on{background:#111;color:#fff;border-color:#111}
+
+/* two-column settings layout, checkbox rows */
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+label.chk { display: flex; align-items: center; gap: 8px; }
+label.chk input { width: auto; }

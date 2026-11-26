@@ -8,7 +8,17 @@ const call = async (t, m, p, b) => { const r = await fetch(`${BASE}/api${p}`, { 
 const login = async (u) => (await call(null, 'POST', '/auth/login', { username: u, password: PASS })).data.token;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let mode = 'ok';
+let evoState = null; const evoCalls = [];
 const mock = http.createServer((req, res) => { let b = ''; req.on('data', (c) => (b += c)); req.on('end', () => {
+  if (req.url.startsWith('/evo/')) {
+    evoCalls.push(`${req.method} ${req.url} key=${req.headers.apikey}`); const j = (c, o) => { res.writeHead(c, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); };
+    if (req.headers.apikey !== 'evo-key') return j(401, { error: 'bad key' });
+    if (req.url.includes('connectionState')) return evoState ? j(200, { instance: { instanceName: 'qatar-hms', state: evoState } }) : j(404, { error: 'not found' });
+    if (req.url.endsWith('/instance/create')) { evoState = 'close'; return j(201, { qrcode: { base64: 'data:image/png;base64,AAAA' } }); }
+    if (req.url.includes('/instance/logout')) { evoState = 'close'; return j(200, { status: 'SUCCESS' }); }
+    if (req.url.includes('/message/sendText')) return j(201, { key: { id: 'x' } });
+    return j(200, {});
+  }
   got.push({ path: req.url, secret: req.headers['x-hms-secret'], body: JSON.parse(b || '{}') });
   res.writeHead(mode === 'ok' ? 200 : 500, { 'content-type': 'application/json' }); res.end(JSON.stringify(mode === 'ok' ? { ok: true } : { ok: false, error: 'evolution down' })); }); });
 
@@ -72,6 +82,24 @@ const mock = http.createServer((req, res) => { let b = ''; req.on('data', (c) =>
   if (b1.status === 200) { const bg = got[got.length - 1]; ok('bill payload carries invoice + pdf', bg.path === '/webhook/hms/bill-send' && bg.body.invoice && bg.body.documents[0].type === 'invoice', bg.body); const ip = await fetch(bg.body.documents[0].url); ok('invoice PDF served', ip.status === 200 && ip.headers.get('content-type') === 'application/pdf'); }
   const noBill = await call(cash, 'POST', '/notify/send', { type: 'bill', visit_id: 999999 }); ok('missing visit is a clean 404', noBill.status === 404, noBill.data);
   const badT = await call(adm, 'POST', '/notify/send', { type: 'x' }); ok('unknown type is 400', badT.status === 400);
+
+  console.log('\n== WhatsApp connect (settings page API)');
+  ok('reception cannot open WhatsApp connect', (await call(rec, 'GET', '/whatsapp/config')).status === 403);
+  const sv = await call(adm, 'PUT', '/whatsapp/config', { evolution_base_url: 'http://localhost:5678/evo', whatsapp_instance: 'qatar-hms', evolution_api_key: 'evo-key' }); ok('config saved', sv.status === 200, sv.data);
+  ok('bad URL rejected', (await call(adm, 'PUT', '/whatsapp/config', { evolution_base_url: 'javascript:alert(1)' })).status === 400);
+  ok('bad instance name rejected', (await call(adm, 'PUT', '/whatsapp/config', { whatsapp_instance: 'a b/../c' })).status === 400);
+  const gc = await call(adm, 'GET', '/whatsapp/config'); ok('config never returns the API key', gc.data.evolution_api_key_set === true && !JSON.stringify(gc.data).includes('evo-key'), gc.data);
+  const gs = (await call(adm, 'GET', '/r/settings?q=evolution_api_key')).data.rows.find((x) => x.key === 'evolution_api_key'); ok('generic settings list masks the key', gs && !JSON.stringify(gs).includes('evo-key'), gs);
+  ok('generic edit of the key is refused', (await call(adm, 'PUT', `/r/settings/${gs.id}`, { ...gs, value: 'x' })).status === 403);
+  const s0 = await call(adm, 'GET', '/whatsapp/status'); ok('status: instance not created yet', s0.data.state === 'no-instance', s0.data);
+  const cn = await call(adm, 'POST', '/whatsapp/connect', {}); ok('connect creates instance and returns QR', cn.status === 200 && cn.data.state === 'connecting' && cn.data.qr, cn.data);
+  ok('status: waiting for scan', (await call(adm, 'GET', '/whatsapp/status')).data.state === 'close');
+  evoState = 'open'; ok('status: connected after scan', (await call(adm, 'GET', '/whatsapp/status')).data.state === 'open');
+  ok('connect when already open says open', (await call(adm, 'POST', '/whatsapp/connect', {})).data.state === 'open');
+  ok('test message works', (await call(adm, 'POST', '/whatsapp/test', { phone: '55123456' })).status === 200);
+  ok('test message needs a valid number', (await call(adm, 'POST', '/whatsapp/test', { phone: 'abc' })).status === 400);
+  ok('disconnect works', (await call(adm, 'POST', '/whatsapp/disconnect', {})).status === 200 && evoState === 'close');
+  ok('Evolution calls carried the apikey header', evoCalls.length > 5 && evoCalls.every((c) => c.endsWith('key=evo-key')), evoCalls);
 
   console.log('\n== Signed PDF links');
   const notify = require('../src/notify');

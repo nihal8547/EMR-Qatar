@@ -80,6 +80,7 @@ app.use('/api', require('./workflows/billing'));
 app.use('/api', require('./workflows/walkin'));
 app.use('/api', require('./workflows/visitmanage'));
 app.use('/api', require('./workflows/notify'));
+app.use('/api', require('./workflows/whatsapp'));
 app.use('/api', crud.router); // generic CRUD last: it blocks portal users
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
@@ -109,6 +110,7 @@ app.use((err, req, res, next) => {
 
 const PORT = Number(process.env.PORT || 4000);
 if (require.main === module) {
+  db.assertDedicatedDb().catch((e) => { console.error(e.message); process.exit(1); });
   const server = app.listen(PORT, () => console.log(`Qatar HMS API listening on http://localhost:${PORT}`));
   server.keepAliveTimeout = 65000; server.headersTimeout = 66000; server.requestTimeout = 60000;
   process.on('unhandledRejection', (e) => console.error('[process] unhandledRejection:', e));

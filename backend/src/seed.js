@@ -141,6 +141,7 @@ async function ins(c, table, row) {
 }
 
 async function main() {
+  await db.assertDedicatedDb();
   const pass = await bcrypt.hash(DEMO_PASSWORD, 10);
   await db.tx(async (c) => {
     const already = await one(c, `SELECT count(*)::int n FROM "auth"."roles"`);
@@ -177,6 +178,9 @@ async function main() {
       ['centre_phone', '+974 4000 0000', 'Phone on invoices'],
       ['tax_note', 'No VAT is currently charged in Qatar on healthcare services. Confirm with your accountant.', 'Printed on invoices'],
       ['currency', 'QAR', 'Currency'],
+      ['evolution_base_url', 'https://evolution.webbea.qa', 'Evolution API base URL'],
+      ['whatsapp_instance', 'qatar-hms', 'Evolution instance name used by HMS (same as in the n8n workflows Config node)'],
+      ['evolution_api_key', '', 'Evolution API key (or set env EVOLUTION_API_KEY)'],
       ['n8n_enabled', 'false', 'WhatsApp via n8n: true / false'],
       ['n8n_webhook_base', 'https://n8n.webbea.qa/webhook/hms', 'n8n webhook base URL (the secret goes in env N8N_WEBHOOK_SECRET)'],
       ['public_base_url', 'http://localhost:4000', 'Public URL of this HMS (WhatsApp PDF links point here; must be reachable from the internet)'],

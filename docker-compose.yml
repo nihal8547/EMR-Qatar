@@ -1,3 +1,5 @@
+# Dedicated project name, database, volume and network: nothing here is shared with n8n or any other stack.
+name: qatar-hms
 services:
   db:
     image: postgres:16-alpine

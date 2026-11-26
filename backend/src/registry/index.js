@@ -43,6 +43,7 @@ const CUSTOM_PAGES = [
   { module: 'billing', label: 'Cashier Desk', to: '/cashier', perm: 'billing.cashier' },
   { module: 'insurance', label: 'Claims Workbench', to: '/claims-workbench', perm: 'claims.work' },
   { module: 'reports', label: 'All Reports', to: '/reports', perm: 'reports.view' },
+  { module: 'admin', label: 'WhatsApp Connect', to: '/whatsapp', perm: 'whatsapp.manage' },
   { module: 'admin', label: 'Role & Permission Matrix', to: '/admin-roles', perm: 'admin.roles' },
   { module: 'portal', label: 'My Portal', to: '/portal', perm: 'portal.use' },
 ];
@@ -68,6 +69,7 @@ const EXTRA_PERMISSIONS = [
   ['pharmacy.dispense_credit', 'Pharmacy: dispense now and bill later (without taking payment)'],
   ['pharmacy.stock', 'Pharmacy: stock and expiry view'],
   ['billing.cashier', 'Cashier: invoices, payments, session'],
+  ['whatsapp.manage', 'Connect the centre WhatsApp number and set up WhatsApp / n8n messaging'],
   ['notify.send', 'Send results, bills and messages to patients on WhatsApp'],
   ['billing.day_close', 'Day Close: close the day and see the closing summary'],
   ['billing.day_reopen', 'Day Close: reopen a closed day'],

@@ -1,5 +1,5 @@
 'use strict';
-const { pool } = require('./db');
+const { pool, assertDedicatedDb } = require('./db');
 const { buildDDL } = require('./ddl');
 const reg = require('./registry');
 
@@ -7,6 +7,7 @@ async function main() {
   const reset = process.argv.includes('--reset');
   const client = await pool.connect();
   try {
+    console.log('Database:', await assertDedicatedDb());
     if (reset) {
       const schemas = new Set(['auth', 'admin']);
       for (const k of reg.order) schemas.add(reg.resources[k].schema);
