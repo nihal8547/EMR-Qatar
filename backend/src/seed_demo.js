@@ -129,6 +129,54 @@ async function workflows() {
 
 /* ---------------- generic filler: tops every page up to TARGET rows ---------------- */
 const refCache = {};
+
+/** 10 sample insured patients: several insurers / plans, family members, one expired and one suspended policy. */
+async function insuredSamples() {
+  const find = async (key, name) => (await rows('admin', key, `&q=${encodeURIComponent(name)}`)).find((x) => x.name === name);
+  const payer = async (name, code, type, days) => (await find('payers', name)) || await must(`payer ${name}`, 'admin', 'POST', '/r/payers', { name, code, type, credit_days: days, claim_format: 'Manual', active: true });
+  const plan = async (payer_id, name, copay_pct, copay_max, annual_limit, network) => (await rows('admin', 'plans', `&payer_id=${payer_id}`)).find((x) => x.name === name) || await must(`plan ${name}`, 'admin', 'POST', '/r/plans', { payer_id, name, copay_pct, copay_max, annual_limit, network, active: true });
+  const gdi = await find('payers', 'Gulf Demo Insurance'); const dtpa = await find('payers', 'Doha Demo TPA');
+  const qsi = await payer('Qatar Shield Insurance', 'QSI', 'Insurer', 45);
+  const wat = await payer('Al Wataniya Health TPA', 'AWH', 'TPA', 60);
+  const gov = await payer('Doha Corporate Care', 'DCC', 'Insurer', 30);
+  const gold = gdi && (await plan(gdi.id, 'Gold', 10, 100, 100000, 'Tier 1'));
+  const basic = dtpa && (await plan(dtpa.id, 'Basic', 20, 50, 20000, 'Tier 2'));
+  const plat = await plan(qsi.id, 'Platinum', 0, 0, 250000, 'Tier 1');
+  const silver = await plan(qsi.id, 'Silver', 15, 75, 50000, 'Tier 2');
+  const std = await plan(wat.id, 'Standard', 20, 60, 30000, 'Tier 2');
+  const corp = await plan(gov.id, 'Corporate', 5, 25, 80000, 'Tier 1');
+  const nat = (await rows('admin', 'nationalities'));
+  const nid = (n) => (nat.find((x) => x.name === n) || nat[0] || {}).id;
+  const y = new Date().getFullYear();
+  const S = [
+    // name, gender, dob, nationality, phone, blood, payer, plan, policy, member, relation, from, to, status
+    ['Yousef Al-Naimi', 'Male', '1983-02-14', 'Qatari', '+974 5502 3001', 'O+', qsi, plat, 'QSI-PL-10001', 'M-10001', 'Self', `${y}-01-01`, `${y}-12-31`, 'Active'],
+    ['Noora Al-Naimi', 'Female', '1986-06-30', 'Qatari', '+974 5502 3002', 'A+', qsi, plat, 'QSI-PL-10001', 'M-10002', 'Spouse', `${y}-01-01`, `${y}-12-31`, 'Active'],
+    ['Hamad Al-Naimi', 'Male', '2014-09-09', 'Qatari', '+974 5502 3003', 'O+', qsi, plat, 'QSI-PL-10001', 'M-10003', 'Child', `${y}-01-01`, `${y}-12-31`, 'Active'],
+    ['Sneha Menon', 'Female', '1991-11-21', 'Indian', '+974 5502 3004', 'B+', gdi, gold, 'GDI-2026-101', 'M-2101', 'Self', `${y}-01-01`, `${y}-12-31`, 'Active'],
+    ['Arun Varghese', 'Male', '1979-04-04', 'Indian', '+974 5502 3005', 'AB+', gov, corp, 'DCC-CP-5501', 'EMP-5501', 'Self', `${y}-03-01`, `${y + 1}-02-28`, 'Active'],
+    ['Liza Fernandez', 'Female', '1994-01-17', 'Filipino', '+974 5502 3006', 'A-', wat, std, 'AWH-ST-7701', 'M-7701', 'Self', `${y}-02-01`, `${y}-12-31`, 'Active'],
+    ['Tariq Mahmood', 'Male', '1972-08-25', 'Pakistani', '+974 5502 3007', 'B-', dtpa, basic, 'DTPA-BS-3301', 'M-3301', 'Self', `${y}-01-01`, `${y}-12-31`, 'Active'],
+    ['Reem Al-Sulaiti', 'Female', '2001-12-02', 'Qatari', '+974 5502 3008', 'O-', qsi, silver, 'QSI-SV-20077', 'M-20077', 'Self', `${y}-01-01`, `${y}-12-31`, 'Active'],
+    ['Peter Okafor', 'Male', '1988-07-07', 'Nigerian', '+974 5502 3009', 'A+', wat, std, 'AWH-ST-7790', 'M-7790', 'Self', `${y - 1}-01-01`, `${y - 1}-12-31`, 'Expired'],
+    ['Dina Haddad', 'Female', '1980-10-10', 'Jordanian', '+974 5502 3010', 'B+', gov, corp, 'DCC-CP-5588', 'EMP-5588', 'Self', `${y}-01-01`, `${y}-12-31`, 'Suspended'],
+  ];
+  let n = 0;
+  for (let i = 0; i < S.length; i++) {
+    const [full_name, gender, dob, nation, phone, blood_group, pr, pl, policy_no, member_id, relation, valid_from, valid_to, status] = S[i];
+    if (!pr || !pl) continue;
+    const r = await must(`insured ${full_name}`, 'reception', 'POST', '/r/patients', {
+      full_name, gender, dob, phone, blood_group, qid: `29${String(8100000000 + i * 1357).padStart(9, '0')}`.slice(0, 11), nationality_id: nid(nation), language: 'English',
+      insurance: [{ payer_id: pr.id, plan_id: pl.id, policy_no, member_id, relation, valid_from, valid_to }],
+    });
+    if (r) {
+      n++;
+      if (status !== 'Active') { const pol = (await rows('admin', 'policy_members', `&patient_id=${r.id}`))[0]; if (pol) await must(`policy ${status}`, 'admin', 'PUT', `/r/policy_members/${pol.id}`, { status }); }
+    }
+  }
+  console.log(`  insured sample patients: ${n}`);
+}
+
 async function refIds(ref) {
   if (!refCache[ref]) refCache[ref] = ((await call('admin', 'GET', `/lookup/${ref}?limit=50`)).data || []).map((x) => x.id);
   return refCache[ref];
@@ -194,6 +242,7 @@ async function topUp() {
   const has = (await call('admin', 'GET', '/r/visits?limit=1')).data.total;
   if (has > 0 && !process.argv.includes('--force')) { console.log('Demo data already present (use --force to add more).'); process.exit(0); }
   await workflows();
+  await insuredSamples();
   await topUp();
   const empty = [];
   for (const k of reg.order) { const n = (await db.query(`SELECT count(*)::int n FROM "${reg.resources[k].schema}"."${reg.resources[k].table}" WHERE is_deleted=false`)).rows[0].n; if (n === 0) empty.push(k); }

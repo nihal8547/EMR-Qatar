@@ -31,7 +31,7 @@ const query = (text, params) => pool.query(text, params);
 
 async function tx(fn) {
   const client = await pool.connect();
-  client.on('error', () => {});
+  if (!client.__errHandled) { client.__errHandled = true; client.on('error', () => {}); }
   try {
     await client.query('BEGIN');
     const res = await fn(client);
