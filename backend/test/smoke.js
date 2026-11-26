@@ -89,15 +89,15 @@ const section = (t) => console.log(`\n== ${t}`);
   ok('encounter saved', (await call(tk.drsara, 'PUT', `/consult/${vid}/encounter`, { chief_complaint: 'Fever', assessment: 'URTI', plan: 'Rest, fluids' })).status === 200);
   ok('diagnosis added', (await call(tk.drsara, 'POST', `/consult/${vid}/diagnoses`, { code_id: dx.id })).status === 201);
 
-  const tests = (await call(tk.drsara, 'GET', '/r/lab_tests?limit=50')).data.rows;
+  const tests = (await call(tk.drsara, 'GET', '/r/lab_tests?limit=200')).data.rows;
   const hb = tests.find((t) => t.code === 'CBC-HB');
   const glu = tests.find((t) => t.code === 'GLU-R');
   const lo = await call(tk.drsara, 'POST', `/consult/${vid}/lab-orders`, { test_ids: [hb.id, glu.id], priority: 'Routine' });
   ok('lab order created', lo.status === 201, lo.data);
 
-  const drugs = (await call(tk.drsara, 'GET', '/r/drugs?limit=50')).data.rows;
-  const para = drugs.find((d) => d.code === 'PARA500');
-  const amox = drugs.find((d) => d.code === 'AMOX500');
+  const dq = async (c) => (await call(tk.drsara, 'GET', `/r/drugs?q=${c}`)).data.rows.find((d) => d.code === c);
+  const para = await dq('PARA500');
+  const amox = await dq('AMOX500');
   const rx = await call(tk.drsara, 'POST', `/consult/${vid}/prescriptions`, { items: [{ drug_id: para.id, dose: '500 mg', frequency: 'TID', duration_days: 5, qty: 15 }] });
   ok('prescription created', rx.status === 201, rx.data);
   // Joseph has a penicillin allergy -> Amoxicillin must warn

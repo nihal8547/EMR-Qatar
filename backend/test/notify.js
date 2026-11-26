@@ -56,7 +56,7 @@ const mock = http.createServer((req, res) => { let b = ''; req.on('data', (c) =>
   await call(adm, 'PUT', `/r/patients/${np.data.id}`, { ...np.data, whatsapp_ok: true });
   const sara = (await call(adm, 'GET', '/r/users?q=drsara')).data.rows[0]; const drsara = await login('drsara');
   const v = await call(rec, 'POST', '/visits/start', { patient_id: np.data.id, doctor_id: sara.id, payer_type: 'Cash', complaint: 'Check-up' }); ok('visit started', v.status === 201, v.data);
-  const tests = (await call(drsara, 'GET', '/r/lab_tests?limit=50')).data.rows; const hb = tests.find((t) => t.code === 'CBC-HB'); const glu = tests.find((t) => t.code === 'GLU-R');
+  const tests = (await call(drsara, 'GET', '/r/lab_tests?limit=200')).data.rows; const hb = tests.find((t) => t.code === 'CBC-HB'); const glu = tests.find((t) => t.code === 'GLU-R');
   const lo = await call(drsara, 'POST', `/consult/${v.data.id}/lab-orders`, { test_ids: [hb.id, glu.id], priority: 'Routine' }); ok('lab ordered', lo.status === 201, lo.data);
   const wl = await call(lab, 'GET', '/lab/worklist'); const wo = (Array.isArray(wl.data) ? wl.data : wl.data.rows).find((o) => o.full_name === 'Notify Test Patient');
   await call(lab, 'POST', `/lab/orders/${wo.id}/collect`, {});

@@ -22,6 +22,7 @@ async function must(label, user, method, path, body) {
   if (r.status >= 400) { problems.push(`${label}: ${r.status} ${JSON.stringify(r.data).slice(0, 160)}`); return null; }
   return r.data;
 }
+const all = async (user, key) => { const out = []; for (let p = 1; p < 50; p += 1) { const r = (await call(user, 'GET', `/r/${key}?limit=200&page=${p}`)).data; out.push(...(r.rows || [])); if (out.length >= (r.total || 0) || !(r.rows || []).length) break; } return out; };
 const rows = async (user, key, q = '') => (await call(user, 'GET', `/r/${key}?limit=100${q}`)).data.rows || [];
 
 async function workflows() {
@@ -43,10 +44,10 @@ async function workflows() {
   const users = await rows('admin', 'users');
   const u = (n) => users.find((x) => x.username === n);
   const sara = u('drsara'); const ravi = u('drravi'); const dent = u('drdental');
-  const drugs = await rows('drsara', 'drugs'); const dr = (c) => drugs.find((d) => d.code === c);
-  const tests = await rows('drsara', 'lab_tests'); const lt = (c) => tests.find((t) => t.code === c);
-  const svcs = await rows('admin', 'services'); const sv = (c) => svcs.find((s) => s.code === c);
-  const dx = await rows('drsara', 'diagnosis_codes'); const dc = (c) => dx.find((d) => d.code === c);
+  const drugs = await all('drsara', 'drugs'); const dr = (c) => drugs.find((d) => d.code === c);
+  const tests = await all('drsara', 'lab_tests'); const lt = (c) => tests.find((t) => t.code === c);
+  const svcs = await all('admin', 'services'); const sv = (c) => svcs.find((s) => s.code === c);
+  const dx = await all('drsara', 'diagnosis_codes'); const dc = (c) => dx.find((d) => d.code === c);
   const mods = await rows('admin', 'imaging_modalities');
   await must('cashier session', 'cashier', 'POST', '/billing/session/open', { opening_cash: 500 });
 

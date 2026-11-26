@@ -74,3 +74,6 @@ Access: 14 roles, permissions per resource (view/create/edit/delete) plus specia
 4. `cd backend && NODE_ENV=production npm run prod:check` – every line should say PASS.
 5. Schedule `deploy/backup.sh` (cron) and test a restore.
 6. Security details: `SECURITY_REPORT.md`. Tests: `npm test`, `node test/security.js`, `node test/auth.js`, `node test/scope.js`, `node test/notify.js`.
+
+## Default Qatar catalogue
+`npm run db:catalog` (also automatic on first start; `CATALOG=false` skips it) loads ~330 pharmacy items (brand names common in Qatar, controlled/narcotic flagged), ~120 lab tests with reference and critical ranges, ~50 X-ray / ultrasound / CT / MRI / mammogram / DEXA studies, ~80 consultations, procedures, vaccines and dental treatments, and ~400 common ICD-10 diagnoses. It never overwrites existing rows, so it is safe to re-run. Prices are indicative QAR defaults: review them in *Service Master* and *Drug Master* before go-live, and load the MOPH ICD-10-CM set for insurance claims. Source lists are in `backend/src/catalog/`.
