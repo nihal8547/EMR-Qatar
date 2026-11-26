@@ -90,7 +90,24 @@ async function decide(v: any, approve: boolean) { try { await api(`/visits/${v.i
     <div v-else class="grid" style="grid-template-columns:2fr 1fr;align-items:start">
       <div class="card">
         <div class="fgrid">
-          <div class="field wide"><label class="f">Patient <span class="req">*</span> <NuxtLink v-if="can('patients.create')" to="/r/patients/new" class="small">+ register new patient</NuxtLink></label><LookupSelect v-model="f.patient_id" resource="patients" placeholder="Name, MRN, QID or phone" /></div>
+          <div class="field wide">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px">
+              <label class="f" style="margin:0">Patient <span class="req">*</span></label>
+              <NuxtLink v-if="can('patients.create')" to="/r/patients/new" class="btn sm p" style="text-decoration:none; display:inline-flex; align-items:center; gap:5px; font-weight:600">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                <span>Register New Patient</span>
+              </NuxtLink>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center">
+              <div style="flex:1">
+                <LookupSelect v-model="f.patient_id" resource="patients" placeholder="Name, MRN, QID or phone" />
+              </div>
+              <NuxtLink v-if="can('patients.create')" to="/r/patients/new" class="btn p" style="white-space:nowrap; text-decoration:none; display:inline-flex; align-items:center; gap:6px; font-weight:600; padding:6px 14px" title="Register New Patient">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                <span>+ New Patient</span>
+              </NuxtLink>
+            </div>
+          </div>
           <div class="field"><label class="f">Doctor <span class="req">*</span></label><LookupSelect v-model="f.doctor_id" resource="doctors" /></div>
           <div class="field"><label class="f">Visit type</label><select v-model="f.visit_type"><option>OPD</option><option>Follow-up</option><option>Emergency</option><option>Tele</option></select></div>
           <div class="field"><label class="f">Payer</label><select v-model="f.payer_type"><option>Cash</option><option>Insurance</option><option>Corporate</option></select></div>
