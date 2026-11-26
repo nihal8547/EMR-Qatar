@@ -10,6 +10,10 @@ if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
   console.error('JWT_SECRET must be set when NODE_ENV=production. Refusing to start.');
   process.exit(1);
 }
+if (process.env.JWT_SECRET && process.env.NODE_ENV === 'production' && process.env.JWT_SECRET.length < 32) {
+  console.error('JWT_SECRET must be at least 32 characters in production. Refusing to start.');
+  process.exit(1);
+}
 const SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 if (!process.env.JWT_SECRET) console.warn('[warn] JWT_SECRET not set; using a development secret. Set JWT_SECRET in production.');
 
@@ -49,7 +53,7 @@ async function authenticate(req, res, next) {
   } catch (e) { next(e); }
 }
 
-/* very small in-memory login throttle: 8 failures / 5 min per username+ip */
+/* in-memory login throttle: 8 failures / 5 min per username (not per IP, so rotating IPs / spoofed headers cannot bypass it) */
 const fails = new Map();
 function throttled(key) {
   const now = Date.now();
@@ -58,18 +62,20 @@ function throttled(key) {
   return arr.length >= 8;
 }
 
+const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 10);
 const router = express.Router();
 
 router.post('/login', wrap(async (req, res) => {
   const username = String(req.body.username || '').trim().toLowerCase();
   const password = String(req.body.password || '');
   if (!username || !password) throw bad('Enter username and password');
-  const key = `${username}|${req.ip}`;
+  const key = username;
   if (throttled(key)) throw new HttpError(429, 'Too many failed attempts. Try again in a few minutes.');
   const { rows } = await db.query(
     `SELECT id, username, password_hash, active, is_deleted FROM "auth"."users" WHERE lower(username)=$1`, [username]);
   const u = rows[0];
-  const ok = u && !u.is_deleted && u.password_hash && (await bcrypt.compare(password, u.password_hash));
+  // always run one bcrypt compare so response time does not reveal whether the username exists
+  const ok = (await bcrypt.compare(password, (u && u.password_hash) || DUMMY_HASH)) && u && !u.is_deleted && u.password_hash;
   if (!ok) {
     fails.get(key).push(Date.now());
     await audit(null, { username, id: null }, 'LOGIN_FAILED', 'auth', null, null, req.ip);

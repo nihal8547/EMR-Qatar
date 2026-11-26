@@ -14,6 +14,8 @@ COPY backend/package*.json ./
 RUN npm install --omit=dev --no-audit --no-fund
 COPY backend/ ./
 COPY --from=web /web/.output/public /app/frontend/.output/public
+RUN chown -R node:node /app
+USER node
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD wget -qO- http://localhost:4000/api/health || exit 1
 CMD ["sh", "-c", "node src/init.js && node src/server.js"]

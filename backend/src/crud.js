@@ -270,7 +270,8 @@ router.get('/r/:key', wrap(async (req, res) => {
     const cols = r.fields.filter((f) => !f.secret && f.type !== 'password');
     const esc = (v) => {
       if (v === null || v === undefined) return '';
-      const s = (v instanceof Date ? v.toISOString() : typeof v === 'object' ? JSON.stringify(v) : String(v));
+      let s = (v instanceof Date ? v.toISOString() : typeof v === 'object' ? JSON.stringify(v) : String(v));
+      if (/^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s)) s = `'${s}`;   // stop spreadsheet formula injection
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const lines = [cols.map((c) => esc(c.label)).join(',')];

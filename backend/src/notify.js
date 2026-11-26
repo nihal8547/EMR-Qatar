@@ -10,7 +10,8 @@ const crypto = require('crypto');
 const db = require('./db');
 
 const PATHS = { 'patient.registered': 'patient-registered', 'result.ready': 'result-ready', 'visit.completed': 'visit-completed', 'bill.send': 'bill-send' };
-const FILE_SECRET = () => process.env.NOTIFY_FILE_SECRET || process.env.JWT_SECRET || 'dev-secret-change-me';
+// Separate key for signed document links (derived, so a leaked link signature can never be used as a login token).
+const FILE_SECRET = () => process.env.NOTIFY_FILE_SECRET || crypto.createHmac('sha256', process.env.JWT_SECRET || 'dev-secret-change-me').update('hms-notify-file-links-v1').digest('hex');
 let cache = null; let cacheAt = 0;
 
 async function settings() {

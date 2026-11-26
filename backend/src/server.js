@@ -15,7 +15,8 @@ hooks.validate(reg);
 
 const app = express();
 app.disable('x-powered-by');
-app.set('trust proxy', 1);
+// Behind a reverse proxy (nginx, Caddy, a load balancer) set TRUST_PROXY=1 so the real client IP is logged. Never trust forwarded headers when the app is exposed directly.
+app.set('trust proxy', process.env.TRUST_PROXY ? (Number.isNaN(Number(process.env.TRUST_PROXY)) ? process.env.TRUST_PROXY : Number(process.env.TRUST_PROXY)) : false);
 app.use(compression({ threshold: 1024 }));
 // request timing: log slow API calls so loading problems are visible in the server log
 app.use((req, res, next) => {
@@ -24,10 +25,14 @@ app.use((req, res, next) => {
   next();
 });
 app.use((req, res, next) => {
-  res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cache-Control': req.path.startsWith('/api') ? 'no-store' : 'no-cache' });
+  res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cache-Control': req.path.startsWith('/api') ? 'no-store' : 'no-cache',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()', 'Cross-Origin-Opener-Policy': 'same-origin',
+    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" });
+  if (req.secure) res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   next();
 });
-app.use(cors({ origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : true }));
+// Same-origin by default (the app and API are served together). Set CORS_ORIGIN=https://a.example,https://b.example to allow others.
+app.use(cors({ origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : false }));
 app.use(express.json({ limit: '2mb' }));
 
 app.get('/api/health', wrap(async (req, res) => {

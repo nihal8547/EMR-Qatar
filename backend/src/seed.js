@@ -8,7 +8,8 @@ const bcrypt = require('bcryptjs');
 const db = require('./db');
 const reg = require('./registry');
 
-const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'Demo@12345';
+// In production a random password is generated (and printed once) unless DEMO_PASSWORD is given: never ship a known default password.
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD || (process.env.NODE_ENV === 'production' ? `${require('crypto').randomBytes(9).toString('base64url')}!9a` : 'Demo@12345');
 
 /* ------------------------------------------------------------------ roles */
 const ALL = reg.allPermissions().map(([c]) => c);

@@ -66,7 +66,8 @@ router.put('/whatsapp/config', need('whatsapp.manage'), wrap(async (req, res) =>
 router.get('/whatsapp/status', need('whatsapp.manage'), wrap(async (req, res) => {
   const c = await cfg();
   if (!c.base || !c.key) return res.json({ configured: false, state: 'not-configured', instance: c.instance });
-  const r = await evo(c, 'GET', `/instance/connectionState/${encodeURIComponent(c.instance)}`);
+  let r;
+  try { r = await evo(c, 'GET', `/instance/connectionState/${encodeURIComponent(c.instance)}`); } catch (e) { return res.json({ configured: true, state: 'error', instance: c.instance, detail: e.message }); }
   if (r.status === 404) return res.json({ configured: true, state: 'no-instance', instance: c.instance });
   if (!r.ok) return res.json({ configured: true, state: 'error', instance: c.instance, detail: typeof r.data === 'string' ? r.data.slice(0, 200) : (r.data && (r.data.message || r.data.error)) || `HTTP ${r.status}` });
   res.json({ configured: true, state: stateOf(r.data) || 'unknown', instance: c.instance });
