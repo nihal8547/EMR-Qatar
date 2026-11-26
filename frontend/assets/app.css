@@ -221,3 +221,31 @@ label.chk input { width: auto; }
 .offbar{padding:8px 16px;font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #000}
 .offbar.off{background:#000;color:#fff}.offbar.q{background:#fff7e0;color:#000}.offbar .bad{color:#b00020}
 .offlist{flex-basis:100%;display:grid;gap:4px}.offlist .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px dashed #cdbb85;padding-top:4px}
+
+/* ---- login ---- */
+.lg{min-height:100vh;display:grid;grid-template-columns:minmax(380px,46%) 1fr;background:#fff}
+.lg-brand{background:#0a0a0a;color:#fff;padding:44px 52px;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden;
+  background-image:radial-gradient(circle at 15% 10%,#242424 0,transparent 42%),repeating-linear-gradient(135deg,rgba(255,255,255,.035) 0 1px,transparent 1px 26px)}
+.lg-logo{width:50px;height:50px;border-radius:13px;background:#fff;display:flex;align-items:center;justify-content:center}
+.lg-mid h1{font-size:44px;line-height:1.05;margin:0 0 12px;letter-spacing:-.5px;color:#fff}
+.lg-tag{font-size:17px;color:#c9c9c9;margin:0 0 34px;max-width:420px}
+.lg-mid ul{list-style:none;padding:0;margin:0;display:grid;gap:18px;max-width:440px}
+.lg-mid li{display:flex;gap:14px;align-items:flex-start}.lg-mid li b{display:block;font-size:15px}.lg-mid li span:not(.lg-dot){display:block;color:#a8a8a8;font-size:13.5px;margin-top:2px}
+.lg-dot{width:9px;height:9px;border-radius:50%;background:#fff;margin-top:6px;flex-shrink:0}
+.lg-foot{font-size:12.5px;color:#8a8a8a}
+.lg-form{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px;background:#fafafa}
+.lg-card{width:400px;max-width:100%;background:#fff;border:1px solid #e3e3e3;border-radius:16px;padding:34px 32px 26px;box-shadow:0 10px 34px rgba(0,0,0,.07)}
+.lg-card h2{margin:0 0 4px;font-size:25px}.lg-card .muted{margin:0 0 20px}
+.lg-mobile-logo{display:none;width:42px;height:42px;border-radius:11px;background:#000;align-items:center;justify-content:center;margin-bottom:14px}
+.lg-l{display:block;font-size:12.5px;font-weight:600;margin:14px 0 6px;color:#222}
+.lg-in{position:relative;display:flex;align-items:center}
+.lg-in>svg{position:absolute;left:12px;color:#777;pointer-events:none}
+.lg-in input{padding:12px 14px 12px 38px;font-size:15px;border:1.5px solid #cfcfcf;border-radius:10px;background:#fff;width:100%}
+.lg-in input:focus{outline:none;border-color:#000;box-shadow:0 0 0 3px rgba(0,0,0,.08)}
+.lg-eye{position:absolute;right:6px;background:none!important;border:0!important;color:#444;font-size:12.5px;font-weight:600;padding:6px 8px;cursor:pointer}
+.lg-in input[type=password]{padding-right:60px}.lg-in input[type=text]{padding-right:60px}
+.lg-caps{font-size:12px;color:#8a5a00;margin-top:6px}
+.lg-rem{display:flex;align-items:center;gap:8px;font-size:13px;color:#444;margin:14px 0 18px}.lg-rem input{width:auto}
+.lg-go{width:100%;padding:13px;font-size:15.5px;border-radius:10px}
+.lg-help{font-size:12.5px;color:#777;text-align:center;margin:16px 0 0}.lg-copy{font-size:12px;color:#999;margin-top:18px}
+@media(max-width:860px){.lg{grid-template-columns:1fr}.lg-brand{display:none}.lg-mobile-logo{display:flex}.lg-form{background:#fff;min-height:100vh;padding:24px 22px}.lg-card{border:0;box-shadow:none;padding:10px 4px}}
