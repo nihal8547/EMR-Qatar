@@ -9,7 +9,7 @@ const groups = computed(() => { const g: Record<string, any[]> = {}; for (const 
 </script>
 <template>
   <div v-if="d" style="max-width:820px;margin:0 auto">
-    <div class="bar no-print"><button @click="$router.back()">‹ Back</button><div class="sp"></div><button class="p" @click="printNow">🖨 Print slip &amp; labels</button></div>
+    <div class="bar no-print"><button @click="$router.back()">‹ Back</button><div class="sp"></div><NuxtLink v-if="d.specimens.length" :to="`/print/lab-labels/${d.order.id}`" class="btn">🏷 Tube labels (sticker size)</NuxtLink><button class="p" @click="printNow">🖨 Print slip</button></div>
     <div class="card" style="background:#fff">
       <div class="bar"><div><h1 style="margin:0">{{ d.centre.centre_name || 'Medical Centre' }}</h1><div class="small muted">{{ d.centre.centre_address }} · {{ d.centre.centre_phone }}</div></div><div class="sp"></div><div class="right"><h2 style="margin:0">SAMPLE COLLECTION SLIP</h2><div>{{ d.order.order_no }}</div><div v-if="d.order.priority !== 'Routine'"><b>{{ d.order.priority }}</b></div></div></div><hr />
       <div class="grid g2"><div><b>{{ d.order.full_name }}</b><div class="small">MRN {{ d.order.mrn }} · {{ d.order.gender }}<template v-if="d.order.dob">, {{ age(d.order.dob) }}</template></div><div class="small">Visit {{ d.order.visit_no }}</div></div><div class="small right">Ordered {{ fdt(d.order.ordered_at) }}<div>Requested by {{ d.order.doctor }}</div></div></div>
