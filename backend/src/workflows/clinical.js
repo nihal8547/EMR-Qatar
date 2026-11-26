@@ -205,8 +205,7 @@ router.put('/visits/:id/status', need('queue.view'), wrap(async (req, res) => {
 }));
 
 /* ---------------------------------------------------------------- Patient 360 */
-router.get('/patients/:id/360', need('patients.360'), wrap(async (req, res) => {
-  const id = Number(req.params.id);
+async function access360(req, id) {
   const patient = await crud.fetchOne(db, crud.getRes('patients'), id);
   if (!patient) throw notFound('Patient not found');
   // roles flagged "restrict to own patients" must have treated the patient or give a break-glass reason
@@ -220,6 +219,12 @@ router.get('/patients/:id/360', need('patients.360'), wrap(async (req, res) => {
       await audit(null, req.user, 'BREAK_GLASS', 'patients', id, { reason }, req.ip);
     }
   }
+  return patient;
+}
+
+router.get('/patients/:id/360', need('patients.360'), wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const patient = await access360(req, id);
   await audit(null, req.user, 'VIEW_PATIENT_360', 'patients', id, null, req.ip);
   const [allergies, visits, vitals, invoices, labs, rx, imaging, policies, family, docs] = await Promise.all([
     db.query(`SELECT allergen, reaction, severity, noted_on FROM "mpi"."patient_allergies" WHERE patient_id=$1 AND is_deleted=false`, [id]),
@@ -240,6 +245,55 @@ router.get('/patients/:id/360', need('patients.360'), wrap(async (req, res) => {
     db.query(`SELECT doc_type, file_name, expiry FROM "mpi"."patient_documents" WHERE patient_id=$1 AND is_deleted=false`, [id]),
   ]);
   res.json({ patient: { ...patient, age: age(patient.dob) }, allergies: allergies.rows, visits: visits.rows, vitals: vitals.rows, invoices: can(req, 'invoices.view') ? invoices.rows : [], labs: labs.rows, prescriptions: rx.rows, imaging: imaging.rows, policies: policies.rows, family: family.rows, documents: docs.rows });
+}));
+
+/* Full history: every visit with everything done in it */
+router.get('/patients/:id/history', need('patients.360'), wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const patient = await access360(req, id);
+  await audit(null, req.user, 'VIEW_PATIENT_HISTORY', 'patients', id, null, req.ip);
+  const money = can(req, 'invoices.view');
+  const q = (sql) => db.query(sql, [id]).then((r) => r.rows);
+  const [visits, encs, dx, vitals, notes, labs, imgs, rx, procs, certs, refs, dental, invs, pays, allergies, consents, docs] = await Promise.all([
+    q(`SELECT v.id, v.visit_no, v.visit_date, v.visit_type, v.status, v.payer_type, v.token_no, v.complaint, d.full_name AS doctor, dep.name AS department
+         FROM "scheduling"."visits" v LEFT JOIN "auth"."users" d ON d.id=v.doctor_id LEFT JOIN "admin"."departments" dep ON dep.id=v.department_id
+        WHERE v.patient_id=$1 AND v.is_deleted=false ORDER BY v.visit_date DESC, v.id DESC`),
+    q(`SELECT visit_id, chief_complaint, history, examination, assessment, plan, follow_up_date FROM "clinical"."encounters" WHERE patient_id=$1 AND is_deleted=false`),
+    q(`SELECT dx.visit_id, dc.code, dc.description, dx.dx_type, dx.notes FROM "clinical"."diagnoses" dx JOIN "clinical"."diagnosis_codes" dc ON dc.id=dx.code_id WHERE dx.patient_id=$1 AND dx.is_deleted=false ORDER BY dx.id`),
+    q(`SELECT visit_id, recorded_at, temperature, pulse, bp_systolic, bp_diastolic, resp_rate, spo2, weight_kg, height_cm, pain_score, triage_level, notes FROM "clinical"."vitals" WHERE patient_id=$1 AND is_deleted=false ORDER BY id`),
+    q(`SELECT visit_id, noted_at, note FROM "clinical"."nursing_notes" WHERE patient_id=$1 AND is_deleted=false ORDER BY id`),
+    q(`SELECT o.id AS order_id, o.visit_id, o.order_no, o.status, o.priority, o.ordered_at, t.name AS test, t.unit, t.ref_low, t.ref_high, i.result_value, i.result_text, i.flag, i.status AS item_status, i.resulted_at
+         FROM "lab"."lab_orders" o LEFT JOIN "lab"."lab_order_items" i ON i.order_id=o.id AND i.is_deleted=false LEFT JOIN "lab"."lab_tests" t ON t.id=i.test_id
+        WHERE o.patient_id=$1 AND o.is_deleted=false ORDER BY o.id, i.id`),
+    q(`SELECT o.id, o.visit_id, o.order_no, o.status, o.priority, o.ordered_at, o.clinical_info, s.name AS study, r.findings, r.impression, r.status AS report_status, r.reported_at
+         FROM "radiology"."imaging_orders" o JOIN "billing"."services" s ON s.id=o.service_id LEFT JOIN "radiology"."imaging_reports" r ON r.order_id=o.id AND r.is_deleted=false
+        WHERE o.patient_id=$1 AND o.is_deleted=false ORDER BY o.id`),
+    q(`SELECT r.id AS rx_id, r.visit_id, r.rx_no, r.status, r.created_at, r.notes, d.generic_name, d.strength, i.dose, i.frequency, i.route, i.duration_days, i.qty, i.dispensed_qty, i.instructions
+         FROM "clinical"."prescriptions" r LEFT JOIN "clinical"."prescription_items" i ON i.prescription_id=r.id AND i.is_deleted=false LEFT JOIN "pharmacy"."drugs" d ON d.id=i.drug_id
+        WHERE r.patient_id=$1 AND r.is_deleted=false ORDER BY r.id, i.id`),
+    q(`SELECT po.visit_id, s.name AS service, po.status, po.notes FROM "clinical"."procedure_orders" po JOIN "billing"."services" s ON s.id=po.service_id WHERE po.patient_id=$1 AND po.is_deleted=false ORDER BY po.id`),
+    q(`SELECT visit_id, cert_type, days, from_date, remarks FROM "clinical"."certificates" WHERE patient_id=$1 AND is_deleted=false ORDER BY id`),
+    q(`SELECT visit_id, to_facility, to_department, urgency, reason FROM "clinical"."referrals" WHERE patient_id=$1 AND is_deleted=false ORDER BY id`),
+    q(`SELECT visit_id, entry_date, dentition, tooth_no, surface, condition, notes FROM "dental"."dental_chart_entries" WHERE patient_id=$1 AND is_deleted=false ORDER BY entry_date, id`),
+    money ? q(`SELECT id, visit_id, invoice_no, invoice_date, gross, discount, net, patient_share, payer_share, paid, balance, status FROM "billing"."invoices" WHERE patient_id=$1 AND is_deleted=false ORDER BY id`) : [],
+    money ? q(`SELECT p.invoice_id, p.receipt_no, p.kind, p.amount, p.method, p.paid_at FROM "billing"."payments" p WHERE p.patient_id=$1 ORDER BY p.id`) : [],
+    q(`SELECT allergen, reaction, severity, noted_on FROM "mpi"."patient_allergies" WHERE patient_id=$1 AND is_deleted=false`),
+    q(`SELECT consent_type, signed_at, withdrawn FROM "mpi"."consents" WHERE patient_id=$1 AND is_deleted=false ORDER BY id DESC`),
+    q(`SELECT doc_type, file_name, expiry FROM "mpi"."patient_documents" WHERE patient_id=$1 AND is_deleted=false`),
+  ]);
+  const by = (arr) => arr.reduce((m, r) => ((m[r.visit_id] = m[r.visit_id] || []).push(r), m), {});
+  const E = Object.fromEntries(encs.map((e) => [e.visit_id, e]));
+  const DX = by(dx), VT = by(vitals), NN = by(notes), PR = by(procs), CE = by(certs), RF = by(refs), DN = by(dental), IM = by(imgs);
+  const group = (rows, key) => { const m = new Map(); for (const r of rows) { if (!m.has(r[key])) m.set(r[key], { ...r, items: [] }); if (r.test || r.generic_name) m.get(r[key]).items.push(r); } return [...m.values()]; };
+  const LB = by(group(labs, 'order_id')), RX = by(group(rx, 'rx_id'));
+  const payByInv = pays.reduce((m, r) => ((m[r.invoice_id] = m[r.invoice_id] || []).push(r), m), {});
+  const INV = by(invs.map((i) => ({ ...i, payments: payByInv[i.id] || [] })));
+  const out = visits.map((v) => ({
+    ...v, encounter: E[v.id] || null, diagnoses: DX[v.id] || [], vitals: VT[v.id] || [], nursing_notes: NN[v.id] || [], labs: LB[v.id] || [], imaging: IM[v.id] || [],
+    prescriptions: RX[v.id] || [], procedures: PR[v.id] || [], certificates: CE[v.id] || [], referrals: RF[v.id] || [], dental: DN[v.id] || [], invoices: INV[v.id] || [],
+  }));
+  const totals = money ? { billed: invs.reduce((a, i) => a + Number(i.net || 0), 0), paid: invs.reduce((a, i) => a + Number(i.paid || 0), 0), due: invs.reduce((a, i) => a + Number(i.balance || 0), 0) } : null;
+  res.json({ patient: { ...patient, age: age(patient.dob) }, allergies, consents, documents: docs, visits: out, dental_no_visit: dental.filter((d) => !d.visit_id), totals });
 }));
 
 /* ---------------------------------------------------------------- Consultation */

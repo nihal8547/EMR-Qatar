@@ -377,6 +377,14 @@ const section = (t) => console.log(`\n== ${t}`);
   const dvFour = await call(tk.admin, 'POST', '/visits/start', { patient_id: dpFour.data.id, doctor_id: saraU.id, payer_type: 'Cash', discount: { type: 'percent', value: 50, reason: 'Manager approval' } });
   ok('user with approval rights gives any discount directly', dvFour.status === 201 && dvFour.data.discount_status === 'Applied', dvFour.data);
 
+  section('Patient full history');
+  const phist = await call(tk.admin, 'GET', `/patients/${dpFour.data.id}/history`);
+  ok('full history returns visits with sections', phist.status === 200 && phist.data.visits.length >= 1 && Array.isArray(phist.data.visits[0].labs) && Array.isArray(phist.data.visits[0].invoices) && phist.data.totals, phist.data);
+  ok('history blocked for roles without 360', (await call(tk.lab, 'GET', `/patients/${dpFour.data.id}/history`)).status === 403);
+  const phP = await call(tk.admin, 'POST', '/r/patients', { full_name: 'History Guard Test', gender: 'Male', qid: '29011223399', dob: '1980-02-02', phone: '+974 5000 7001' });
+  const phistN = await call(tk.nurse, 'GET', `/patients/${phP.data.id}/history`);
+  ok('history keeps the break-glass rule for restricted roles', phistN.status === 403 && phistN.data.extra?.breakglass, phistN.data);
+
   console.log(`\n${passed} passed, ${failed.length} failed`);
   if (failed.length) { console.log('Failed:\n - ' + failed.join('\n - ')); process.exit(1); }
 })().catch((e) => { console.error('Test crashed:', e); process.exit(2); });
