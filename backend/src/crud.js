@@ -210,7 +210,7 @@ async function list(res, query, user) {
   if (kind) where += ` AND ${scopeSQL(user, 't', kind, params)}`;
   let order = res.orderBy;
   if (query.sort) {
-    const f = res.fields.find((x) => x.name === query.sort && !x.secret);
+    const f = res.fields.find((x) => x.name === query.sort && !x.secret && x.type !== 'password');
     if (f || ['id', 'created_at', 'updated_at'].includes(query.sort)) {
       order = `t.${q(query.sort)} ${String(query.dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC'}, t."id" DESC`;
     }
