@@ -175,3 +175,32 @@ button.rm{padding:2px 8px;line-height:1.2}
 .totals .strong{font-weight:650;color:var(--ink);font-size:14.5px;padding-top:4px;border-top:1px solid #eee}
 .paysum{display:flex;gap:12px;flex-wrap:wrap}.paysum>div{flex:1;min-width:130px;background:#f7f7f7;border:1px solid var(--line);border-radius:10px;padding:10px 14px}.paysum .k{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:2px}.paysum b{font-size:19px}
 .pay-card{border:1.5px solid #111}
+
+/* ===== Button system: every variant works on <button> and <a class="btn"> ===== */
+button,.btn{text-decoration:none;white-space:nowrap;align-items:center;gap:6px;justify-content:center;user-select:none}
+a.btn{display:inline-flex;color:var(--ink)}button{display:inline-flex}
+.btn.p,button.p{background:#111;border-color:#111;color:#fff}
+a.btn.p{color:#fff}.btn.p:hover{background:#262626;border-color:#262626}
+.btn.ok,button.ok{background:#15803d;border-color:#15803d;color:#fff}
+a.btn.ok{color:#fff}.btn.ok:hover:not(:disabled),button.ok:hover:not(:disabled){background:#166534;border-color:#166534}
+.btn.danger,button.danger{background:#fff;color:#b42318;border-color:#e7b4ae}
+.btn.danger:hover:not(:disabled),button.danger:hover:not(:disabled){background:#fdecea;border-color:#d92d20}
+.btn.danger.solid,button.danger.solid{background:#b42318;border-color:#b42318;color:#fff}
+.btn.danger.solid:hover:not(:disabled),button.danger.solid:hover:not(:disabled){background:#912018}
+.btn.warn,button.warn{background:#fff8e6;border-color:#f0d58a;color:#7a4f06}
+.btn.ghost,button.ghost{background:transparent;border-color:transparent;color:#525252}
+.btn.ghost:hover,button.ghost:hover:not(:disabled){background:#f1f1f1}
+.btn.lg,button.lg{padding:10px 22px;font-size:15px;font-weight:600}
+.btn.sm.ok,button.sm.ok{background:#15803d;color:#fff}.btn.sm.p,button.sm.p{background:#111;color:#fff}
+.btn:active:not(:disabled),button:active:not(:disabled){transform:translateY(1px)}
+button:disabled,.btn.disabled{opacity:.45;cursor:not-allowed}
+td button.sm,td .btn.sm{margin-right:4px}td button.sm:last-child{margin-right:0}
+.bar>button,.bar>.btn,.bar>a.btn{flex:none}
+/* payment / cancel areas */
+.act-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.act-row .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#737373;font-weight:600;margin-right:2px}
+.cancel-zone{margin-top:12px;padding:10px 12px;border:1px dashed #e7b4ae;border-radius:10px;background:#fffafa}
+.cancel-zone .t{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#b42318;font-weight:700;margin-bottom:6px}
+.pay-card button.ok{padding:10px 20px;font-size:14px;font-weight:600}
+.method-pills{display:flex;gap:6px;flex-wrap:wrap}
+.method-pills button{border-radius:99px;padding:6px 16px}.method-pills button.on{background:#111;color:#fff;border-color:#111}

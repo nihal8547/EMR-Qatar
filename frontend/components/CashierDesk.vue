@@ -116,8 +116,7 @@ async function closeSession() {
         <div class="card">
           <div class="bar"><h2 style="margin:0">Bill items <span class="cnt-pill">{{ items.length }}</span></h2><div class="sp"></div>
             <span v-if="inv" class="muted small">Invoice {{ inv.invoice_no }}</span><span v-if="inv" class="badge" :class="badgeClass(inv.status)">{{ inv.status }}</span>
-            <NuxtLink v-if="inv" :to="`/print/invoice/${inv.id}`" class="btn sm">🖨 Print</NuxtLink>
-            <button v-if="d.pending.length" class="sm danger" :disabled="busy" @click="cancelUnbilled">✕ Cancel all unbilled</button></div>
+            <NuxtLink v-if="inv" :to="`/print/invoice/${inv.id}`" class="btn sm">🖨 Print</NuxtLink></div>
           <div v-if="!items.length" class="none-txt">No charges for this visit yet.</div>
           <table v-else class="bill"><thead><tr><th style="width:34px">#</th><th>Item</th><th>Source</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th><th style="width:34px" class="no-print"></th></tr></thead>
             <tbody><tr v-for="(c, i) in items" :key="(c.billed ? 'i' : 'p') + c.id"><td class="muted">{{ i + 1 }}</td>
@@ -127,9 +126,13 @@ async function closeSession() {
           <div v-if="items.length" class="bill-foot">
             <div class="bill-ctl">
               <div class="bar" style="margin:0"><label class="small muted">Discount %</label><input type="number" min="0" max="100" step="any" v-model.number="disc" style="width:90px" @input="discTouched = true" :disabled="!can('billing.discount') && !can('billing.approve_discount')" /><span v-if="!can('billing.discount') && !can('billing.approve_discount')" class="small muted">no discount rights</span></div>
-              <div class="bar" style="margin:8px 0 0"><button class="p" :disabled="busy || (!d.pending.length && !inv)" @click="makeInvoice">{{ inv ? 'Add new charges / refresh invoice' : 'Create invoice' }}</button>
-                <button v-if="inv && inv.status !== 'Cancelled' && !d.invoice.cancel_request && Number(inv.paid) > 0 && can('bill_cancel_requests.create') && !can('bill_cancel_requests.approve')" :disabled="busy" @click="requestCancel">Request bill cancel</button>
-                <button v-if="inv && can('billing.cashier') && Number(inv.paid) === 0 && inv.status !== 'Cancelled'" class="danger" @click="cancelInvoice">Cancel invoice</button></div>
+              <div class="act-row"><button class="p" :disabled="busy || (!d.pending.length && !inv)" @click="makeInvoice">{{ inv ? 'Add new charges / refresh invoice' : 'Create invoice' }}</button></div>
+              <div v-if="d.pending.length || (inv && inv.status !== 'Cancelled')" class="cancel-zone no-print"><div class="t">Cancel options</div>
+                <div class="act-row" style="margin-top:0">
+                  <button v-if="d.pending.length" class="danger" :disabled="busy" @click="cancelUnbilled">✕ Cancel all unbilled items</button>
+                  <button v-if="inv && can('billing.cashier') && Number(inv.paid) === 0 && inv.status !== 'Cancelled'" class="danger" :disabled="busy" @click="cancelInvoice">✕ Cancel invoice</button>
+                  <button v-if="inv && inv.status !== 'Cancelled' && !d.invoice.cancel_request && Number(inv.paid) > 0 && can('bill_cancel_requests.create') && !can('bill_cancel_requests.approve')" class="danger" :disabled="busy" @click="requestCancel">✕ Request bill cancel</button>
+                  <span v-if="inv && Number(inv.paid) > 0" class="small muted">Paid bill: cancel the receipt below first.</span></div></div>
             </div>
             <dl class="totals">
               <template v-if="inv"><dt>Gross</dt><dd>{{ money(inv.gross) }}</dd><dt>Discount</dt><dd>− {{ money(inv.discount) }}</dd><dt class="strong">Net total</dt><dd class="strong">{{ money(inv.net) }}</dd>
@@ -144,7 +147,7 @@ async function closeSession() {
           <div v-if="d.invoice?.payments.length" style="margin-bottom:10px"><table><thead><tr><th>Receipt</th><th>Date</th><th>Method</th><th>Cashier</th><th class="num">Amount</th><th class="no-print"></th></tr></thead><tbody><tr v-for="p in d.invoice.payments" :key="p.id"><td>{{ p.receipt_no }}</td><td>{{ fdt(p.paid_at) }}</td><td>{{ p.method }} <span class="muted small">{{ p.reference }}</span></td><td>{{ p.cashier }}</td><td class="num">{{ p.kind === 'Refund' ? '-' : '' }}{{ money(p.amount) }}</td><td class="no-print"><span v-if="p.voided" class="badge red">cancelled</span><button v-else-if="p.kind === 'Payment' && p.method !== 'Deposit' && can('bill_cancel_requests.approve')" class="sm danger" :disabled="busy" @click="voidReceipt(p)">Cancel receipt</button></td></tr></tbody></table></div>
           <div v-if="inv" class="paysum"><div><span class="k">Patient share</span><b>{{ money(inv.patient_share) }}</b></div><div><span class="k">Paid</span><b>{{ money(inv.paid) }}</b></div><div><span class="k">Balance due</span><b :style="{ color: Number(inv.balance) > 0 ? 'var(--bad)' : 'var(--ok)' }">{{ money(inv.balance) }}</b></div></div>
           <template v-if="d.pending.length || (inv && Number(inv.balance) > 0 && inv.status !== 'Cancelled')">
-            <div class="fgrid" style="margin-top:12px"><div class="field"><label class="f">Method</label><select v-model="pay.method"><option>Cash</option><option>Card</option><option>Bank transfer</option><option v-if="d.deposit_balance > 0">Deposit</option><option>Online</option></select></div>
+            <div class="fgrid" style="margin-top:12px"><div class="field wide"><label class="f">Payment method</label><div class="method-pills"><button v-for="m in ['Cash', 'Card', 'Bank transfer', 'Online', ...(d.deposit_balance > 0 ? ['Deposit'] : [])]" :key="m" type="button" :class="{ on: pay.method === m }" @click="pay.method = m">{{ m }}</button></div></div>
               <div class="field"><label class="f">Reference (card slip / transfer)</label><input v-model="pay.reference" /></div>
               <div v-if="!d.pending.length" class="field"><label class="f">Amount</label><input type="number" step="any" v-model.number="pay.amount" /></div></div>
             <div class="bar" style="margin-top:6px">
